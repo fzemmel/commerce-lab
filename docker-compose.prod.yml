@@ -1,0 +1,16 @@
+services:
+  commerce-lab:
+    image: ${CONTAINER_IMAGE}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    external: true
+    name: ${APP_NETWORK_NAME}

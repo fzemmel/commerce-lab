@@ -1,0 +1,69 @@
+version: 2
+
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Europe/Berlin"
+    open-pull-requests-limit: 3
+    groups:
+      next:
+        patterns:
+          - "next"
+          - "eslint-config-next"
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+      storybook:
+        patterns:
+          - "storybook"
+          - "@storybook/*"
+      tooling:
+        patterns:
+          - "eslint"
+          - "typescript"
+          - "vitest"
+          - "@lhci/cli"
+          - "@tailwindcss/postcss"
+          - "tailwindcss"
+          - "@types/node"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:15"
+      timezone: "Europe/Berlin"
+    open-pull-requests-limit: 1
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:30"
+      timezone: "Europe/Berlin"
+    open-pull-requests-limit: 1
+    ignore:
+      - dependency-name: "node"
+        update-types:
+          - "version-update:semver-major"
