@@ -2,7 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+This changelog includes the private pre-release development history of the project. Version `1.0.0` marks the first public release.
+
 ## Unreleased
+
+## 1.0.1 - 2026-07-11
+
+### Changed
+
+- Updated project dependencies and lockfile state.
+- Added pnpm workspace override configuration for dependency compatibility and security resolution.
+- Kept the public project setup aligned with the updated pnpm dependency graph.
+
+### Fixed
+
+- Fixed the Docker build by copying `pnpm-workspace.yaml` into the dependency install stage before `pnpm install --frozen-lockfile`.
+- Restored compatibility between the committed lockfile and deployment builds using frozen installs.
+
+## 1.0.0 - 2026-07-10
+
+### Changed
+
+- First public release of the project.
+- Public-facing documentation was revised for repository publication.
+- Sensitive operational details were reduced or removed from the public documentation where appropriate.
+
+### Notes
+
+- Versions `0.1.0` to `0.6.0` represent the pre-public development history of the project and are intentionally preserved for transparency.
+
+## Pre-public development history
 
 ## 0.6.0 - 2026-06-28
 
