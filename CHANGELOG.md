@@ -6,6 +6,10 @@ This changelog includes the private pre-release development history of the proje
 
 ## Unreleased
 
+### Changed
+
+- Aligned the `package.json` project version with the current public release line so local package metadata matches the latest published release.
+
 ## 1.0.1 - 2026-07-11
 
 ### Changed
