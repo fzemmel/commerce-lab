@@ -62,6 +62,8 @@ This keeps the data-reading path simple and server-first while still providing a
 
 ## Local Setup
 
+Node.js 22 is required for local development and automation.
+
 Install dependencies:
 
 ```bash
@@ -78,6 +80,18 @@ Run linting:
 
 ```bash
 pnpm lint
+```
+
+Run the fast development quality gate (linting, type checking, and unit tests):
+
+```bash
+pnpm check
+```
+
+Run the complete CI-equivalent validation pipeline (including production and Storybook builds, and Lighthouse audits):
+
+```bash
+pnpm verify
 ```
 
 Run unit tests:
@@ -114,6 +128,8 @@ The app runs at `http://localhost:3000` by default.
 
 If pnpm is not installed locally, install it first with your preferred Node package manager.
 
+See [DESIGN.md](DESIGN.md) for the implemented architecture and its invariants.
+
 ## Production Deployment
 
 The app can be deployed as a containerized Next.js standalone service. `next.config.ts` enables `output: "standalone"`, and the production image runs the generated `server.js` process on port `3000`.
@@ -124,14 +140,10 @@ The production Compose file is `docker-compose.prod.yml`. It expects the deploym
 
 ## Deployment Pipeline
 
-GitHub Actions runs quality checks for pushes and pull requests targeting `main`:
+GitHub Actions runs the canonical repository validation command for pushes and pull requests targeting `main`:
 
 ```bash
-pnpm lint
-pnpm test
-pnpm build
-pnpm build-storybook
-pnpm lhci
+pnpm verify
 ```
 
 On pushes to main, the deployment workflow then:

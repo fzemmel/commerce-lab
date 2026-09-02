@@ -6,9 +6,17 @@ This changelog includes the private pre-release development history of the proje
 
 ## Unreleased
 
+### Added
+
+- Added canonical type-checking and repository validation commands.
+- Added a compact architecture reference in `DESIGN.md`.
+- Added a Node.js 22 declaration for local development and automation.
+
 ### Changed
 
 - Aligned the `package.json` project version with the current public release line so local package metadata matches the latest published release.
+- Simplified and updated agent instructions.
+- Restricted package publishing permissions to the production deployment job.
 
 ## 1.0.1 - 2026-07-11
 

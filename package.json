@@ -3,11 +3,17 @@
   "version": "1.0.1",
   "private": true,
   "packageManager": "pnpm@10.24.0",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build && mkdir -p .next/standalone/.next && cp -R public .next/standalone/public && cp -R .next/static .next/standalone/.next/static",
     "start": "node .next/standalone/server.js",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm lint && pnpm typecheck && pnpm test",
+    "verify": "pnpm check && pnpm build && pnpm build-storybook && pnpm lhci",
     "lhci": "lhci autorun",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
