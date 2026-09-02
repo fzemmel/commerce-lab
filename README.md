@@ -88,7 +88,7 @@ Run the fast development quality gate (linting, type checking, and unit tests):
 pnpm check
 ```
 
-Run the complete CI-equivalent validation pipeline (including production, Storybook, and Lighthouse builds):
+Run the complete CI-equivalent validation pipeline (including production and Storybook builds, and Lighthouse audits):
 
 ```bash
 pnpm verify
