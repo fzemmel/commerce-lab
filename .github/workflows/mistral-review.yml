@@ -1,0 +1,48 @@
+name: Mistral AI Code Review
+on:
+  pull_request:
+    types: [opened, synchronize]
+  issue_comment:
+    types: [created]
+
+jobs:
+  mistral-review:
+    if: github.event_name == 'pull_request' || contains(github.event.comment.body, '@mistral-review')
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Mistral Review
+        env:
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_TITLE: ${{ github.event.pull_request.title || github.event.issue.title }}
+          PR_BODY: ${{ github.event.pull_request.body || github.event.issue.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: |
+          # Auf issue_comment-Events gehört der Kommentar zu einem Issue,
+          # solange er nicht zu einem Pull Request gehört.
+          if ! gh pr view "$PR_NUMBER" > /dev/null 2>&1; then
+            echo "Kommentar #$PR_NUMBER gehört zu keinem Pull Request - ueberspringe."
+            exit 0
+          fi
+
+          # JSON-Payload mit jq bauen, damit Sonderzeichen in Titel und
+          # Beschreibung das JSON nicht ungueltig machen (kein Shell-Quoting noetig).
+          PAYLOAD=$(jq -n \
+            --arg model "mistral-medium" \
+            --arg content "Analysiere diesen Pull Request und gib konstruktives Feedback zum Code und zur Beschreibung. PR-Titel: $PR_TITLE | Beschreibung: $PR_BODY" \
+            '{model: $model, messages: [{role: "user", content: $content}], temperature: 0.3}')
+
+          REVIEW=$(curl -s -X POST "https://api.mistral.ai/v1/chat/completions" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $MISTRAL_API_KEY" \
+            -d "$PAYLOAD" | jq -r '.choices[0].message.content')
+
+          # Feedback als PR-Kommentar posten
+          gh pr comment "$PR_NUMBER" --body "$REVIEW"
