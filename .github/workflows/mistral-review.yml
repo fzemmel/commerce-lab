@@ -36,12 +36,32 @@ jobs:
             exit 0
           fi
 
-          # Build the JSON payload with jq so special characters in the title and
-          # description cannot break the JSON (no shell quoting needed).
+          # Fetch the diff and drop generated files that would waste tokens.
+          PR_DIFF=$(gh pr diff "$PR_NUMBER" | awk '
+            /^diff --git / { keep = ($0 !~ /pnpm-lock\.yaml|package-lock\.json|yarn\.lock/) }
+            keep
+          ')
+
+          # Cap the diff so very large changes cannot blow up the prompt.
+          DIFF_MAX_CHARS=60000
+          if [ "${#PR_DIFF}" -gt "$DIFF_MAX_CHARS" ]; then
+            PR_DIFF="${PR_DIFF:0:$DIFF_MAX_CHARS}"
+            PR_DIFF="$PR_DIFF
+          ... [diff truncated at $DIFF_MAX_CHARS characters]"
+          fi
+
+          # Include recent comments so the review can build on earlier feedback
+          # instead of repeating points that were already addressed.
+          PR_COMMENTS=$(gh pr view "$PR_NUMBER" \
+            --json comments \
+            --jq '[.comments[-10:][] | {author: .author.login, body: .body[0:2000]}]')
+
+          # Build the JSON payload with jq so special characters in the title,
+          # description, comments, and diff cannot break the JSON.
           # mistral-medium is used as a balance between cost and quality for code reviews.
           PAYLOAD=$(jq -n \
             --arg model "mistral-medium" \
-            --arg content "Analyze this pull request and give constructive feedback on the code and the description. PR title: $PR_TITLE | Description: $PR_BODY" \
+            --arg content "Analyze this pull request and give constructive feedback on the code and the description. Consider the previous comments: if earlier feedback was already addressed in the diff, do not repeat it. PR title: $PR_TITLE | Description: $PR_BODY | Previous comments (JSON): $PR_COMMENTS | Diff: $PR_DIFF" \
             '{model: $model, messages: [{role: "user", content: $content}], temperature: 0.3}')
 
           HTTP_RESPONSE=$(curl -s --max-time 60 -w "%{http_code}" -X POST "https://api.mistral.ai/v1/chat/completions" \
