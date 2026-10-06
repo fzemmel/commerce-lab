@@ -193,6 +193,19 @@ Avoid:
 * Unused dependencies.
 * Mock complexity that distracts from the frontend architecture.
 
+### Language
+
+Write all repository content in English.
+
+This includes:
+
+* Code comments
+* Commit messages
+* Branch names
+* Issues and pull requests
+* Workflow files
+* User-facing UI text
+
 ## Component Guidelines
 
 ### Product Components
