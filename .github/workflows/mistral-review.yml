@@ -5,13 +5,17 @@ on:
   issue_comment:
     types: [created]
 
+# Cancel outdated runs when a pull request receives multiple events in quick succession.
+concurrency:
+  group: mistral-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
 jobs:
   mistral-review:
     if: github.event_name == 'pull_request' || contains(github.event.comment.body, '@mistral-review')
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
-      issues: write
       contents: read
 
     steps:
@@ -25,24 +29,35 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body || github.event.issue.body }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
         run: |
-          # Auf issue_comment-Events gehört der Kommentar zu einem Issue,
-          # solange er nicht zu einem Pull Request gehört.
+          # On issue_comment events the comment may belong to a plain issue
+          # instead of a pull request.
           if ! gh pr view "$PR_NUMBER" > /dev/null 2>&1; then
-            echo "Kommentar #$PR_NUMBER gehört zu keinem Pull Request - ueberspringe."
+            echo "Comment #$PR_NUMBER does not belong to a pull request - skipping."
             exit 0
           fi
 
-          # JSON-Payload mit jq bauen, damit Sonderzeichen in Titel und
-          # Beschreibung das JSON nicht ungueltig machen (kein Shell-Quoting noetig).
+          # Build the JSON payload with jq so special characters in the title and
+          # description cannot break the JSON (no shell quoting needed).
+          # mistral-medium is used as a balance between cost and quality for code reviews.
           PAYLOAD=$(jq -n \
             --arg model "mistral-medium" \
-            --arg content "Analysiere diesen Pull Request und gib konstruktives Feedback zum Code und zur Beschreibung. PR-Titel: $PR_TITLE | Beschreibung: $PR_BODY" \
+            --arg content "Analyze this pull request and give constructive feedback on the code and the description. PR title: $PR_TITLE | Description: $PR_BODY" \
             '{model: $model, messages: [{role: "user", content: $content}], temperature: 0.3}')
 
-          REVIEW=$(curl -s -X POST "https://api.mistral.ai/v1/chat/completions" \
+          HTTP_RESPONSE=$(curl -s --max-time 60 -w "%{http_code}" -X POST "https://api.mistral.ai/v1/chat/completions" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $MISTRAL_API_KEY" \
-            -d "$PAYLOAD" | jq -r '.choices[0].message.content')
+            -d "$PAYLOAD")
 
-          # Feedback als PR-Kommentar posten
+          HTTP_CODE="${HTTP_RESPONSE: -3}"
+          API_RESPONSE="${HTTP_RESPONSE:0:${#HTTP_RESPONSE}-3}"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Mistral API returned HTTP $HTTP_CODE"
+            exit 1
+          fi
+
+          REVIEW=$(echo "$API_RESPONSE" | jq -r '.choices[0].message.content')
+
+          # Post the feedback as a PR comment.
           gh pr comment "$PR_NUMBER" --body "$REVIEW"
