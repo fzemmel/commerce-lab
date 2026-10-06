@@ -1,0 +1,87 @@
+name: Mistral AI Code Review
+on:
+  pull_request:
+    types: [opened, synchronize]
+  issue_comment:
+    types: [created]
+
+# Cancel outdated runs when a pull request receives multiple events in quick succession.
+concurrency:
+  group: mistral-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  mistral-review:
+    if: github.event_name == 'pull_request' || contains(github.event.comment.body, '@mistral-review')
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      # Needed to reply when @mistral-review is used on a plain issue.
+      issues: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Mistral Review
+        env:
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_TITLE: ${{ github.event.pull_request.title || github.event.issue.title }}
+          PR_BODY: ${{ github.event.pull_request.body || github.event.issue.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: |
+          # On issue_comment events the comment may belong to a plain issue
+          # instead of a pull request.
+          if ! gh pr view "$PR_NUMBER" > /dev/null 2>&1; then
+            echo "Comment #$PR_NUMBER does not belong to a pull request - replying and skipping."
+            gh issue comment "$PR_NUMBER" --body "@mistral-review only works on pull requests, not on plain issues."
+            exit 0
+          fi
+
+          # Fetch the diff and drop generated files that would waste tokens.
+          PR_DIFF=$(gh pr diff "$PR_NUMBER" | awk '
+            /^diff --git / { keep = ($0 !~ /pnpm-lock\.yaml|package-lock\.json|yarn\.lock/) }
+            keep
+          ')
+
+          # Cap the diff so very large changes cannot blow up the prompt.
+          # The notice goes first so the model knows the diff is partial up front.
+          DIFF_MAX_CHARS=60000
+          if [ "${#PR_DIFF}" -gt "$DIFF_MAX_CHARS" ]; then
+            PR_DIFF="[Diff truncated at $DIFF_MAX_CHARS characters]
+          ${PR_DIFF:0:$DIFF_MAX_CHARS}"
+          fi
+
+          # Include recent comments so the review can build on earlier feedback
+          # instead of repeating points that were already addressed.
+          PR_COMMENTS=$(gh pr view "$PR_NUMBER" \
+            --json comments \
+            --jq '[.comments[-10:][] | {author: .author.login, body: .body[0:2000]}]')
+
+          # Build the JSON payload with jq so special characters in the title,
+          # description, comments, and diff cannot break the JSON.
+          # mistral-medium is used as a balance between cost and quality for code reviews.
+          # Temperature 0.3 keeps reviews consistent and deterministic.
+          PAYLOAD=$(jq -n \
+            --arg model "mistral-medium" \
+            --arg content "Analyze this pull request and give constructive feedback on the code and the description. Focus on code quality, security, and adherence to the project guidelines in AGENTS.md. Consider the previous comments: if earlier feedback was already addressed in the diff, do not repeat it. Structure your feedback with the headings Code Feedback and Description Feedback. PR title: $PR_TITLE | Description: $PR_BODY | Previous comments (JSON): $PR_COMMENTS | Diff: $PR_DIFF" \
+            '{model: $model, messages: [{role: "user", content: $content}], temperature: 0.3}')
+
+          HTTP_RESPONSE=$(curl -s --max-time 60 -w "%{http_code}" -X POST "https://api.mistral.ai/v1/chat/completions" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $MISTRAL_API_KEY" \
+            -d "$PAYLOAD")
+
+          HTTP_CODE="${HTTP_RESPONSE: -3}"
+          API_RESPONSE="${HTTP_RESPONSE:0:${#HTTP_RESPONSE}-3}"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Mistral API returned HTTP $HTTP_CODE"
+            exit 1
+          fi
+
+          REVIEW=$(echo "$API_RESPONSE" | jq -r '.choices[0].message.content')
+
+          # Post the feedback as a PR comment.
+          gh pr comment "$PR_NUMBER" --body "$REVIEW"

@@ -27,6 +27,10 @@ Use Server Components by default. Add `"use client"` only for browser interactio
 
 Use semantic HTML and native controls. Keep controls visibly labeled, keyboard-operable, and focusable. Use links for navigation and buttons for actions. Preserve meaningful image alternatives and clear loading, empty, and error states.
 
+## Language
+
+Write all repository content in English: code comments, commit messages, branch names, issues and pull requests, workflow files, and user-facing UI text.
+
 ## Commands
 
 ```bash
