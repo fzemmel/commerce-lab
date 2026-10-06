@@ -3,11 +3,17 @@
   "version": "1.0.1",
   "private": true,
   "packageManager": "pnpm@10.24.0",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build && mkdir -p .next/standalone/.next && cp -R public .next/standalone/public && cp -R .next/static .next/standalone/.next/static",
     "start": "node .next/standalone/server.js",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm lint && pnpm typecheck && pnpm test",
+    "verify": "pnpm check && pnpm build && pnpm build-storybook && pnpm lhci",
     "lhci": "lhci autorun",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
@@ -15,22 +21,22 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "next": "16.2.10",
+    "next": "16.2.12",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },
   "devDependencies": {
     "@lhci/cli": "^0.15.1",
-    "@storybook/nextjs-vite": "^10.5.0",
+    "@storybook/nextjs-vite": "^10.5.10",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.10",
-    "storybook": "^10.5.0",
+    "eslint-config-next": "16.2.12",
+    "storybook": "^10.5.10",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }
