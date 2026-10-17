@@ -84,13 +84,28 @@ function ensureIntegrationBranch() {
 }
 function trackedChanges() {
   run("git", ["add", "-A"]);
-  return git("diff", "--cached", "--name-only").split("\n").filter(Boolean);
+  return git("diff", "--cached", "--no-renames", "--name-only").split("\n").filter(Boolean);
 }
 function ensureSafeDiff() {
   const changed = trackedChanges();
   if (!changed.length) throw new Error("Agent produced no file changes");
   const risky = riskyPaths(changed);
   if (risky.length) throw new Error("Protected files changed: " + risky.join(", "));
+}
+async function awaitIntegrationCI() {
+  git("fetch", "origin", target);
+  const sha = git("rev-parse", "refs/remotes/origin/" + target);
+  for (let attempt = 0; attempt < 90; attempt++) {
+    const runs = JSON.parse(gh("run", "list", "--workflow", "ci.yml", "--branch", target,
+      "--json", "headSha,status,conclusion", "--limit", "20"));
+    const match = runs.find((run) => run.headSha === sha);
+    if (match?.status === "completed") {
+      if (match.conclusion !== "success") throw new Error("Integration branch CI failed on " + sha);
+      return;
+    }
+    await sleep(20000);
+  }
+  throw new Error("Integration branch CI did not complete for " + sha);
 }
 function getIssues() {
   const items = apiPages("repos/" + repo + "/issues?milestone=" + milestone + "&state=all&per_page=100");
@@ -171,8 +186,10 @@ async function awaitVerdict(prNumber) {
     const sha = pr.head.sha;
     const reviews = apiPages("repos/" + repo + "/issues/" + prNumber + "/comments?per_page=100");
     const review = reviewForSha(reviews, sha);
-    const checks = api("repos/" + repo + "/commits/" + sha + "/check-runs?per_page=100");
-    const quality = qualityStatus(checks.check_runs);
+    // The pull_request CI runs against GitHub's synthetic merge commit, not
+    // necessarily the PR head. GraphQL statusCheckRollup follows the PR.
+    const checks = JSON.parse(gh("pr", "view", String(prNumber), "--json", "statusCheckRollup")).statusCheckRollup || [];
+    const quality = qualityStatus(checks);
     if (review?.verdict === "INVALID") return { sha, verdict: "INVALID", quality, feedback: review.body };
     if (review && quality !== "PENDING") {
       return { sha, verdict: review.verdict, quality, feedback: review.body };
@@ -182,7 +199,8 @@ async function awaitVerdict(prNumber) {
   throw new Error("Review or CI timed out after 30 minutes; inspect GitHub Actions");
 }
 function verifyPRDiff(prNumber) {
-  const files = apiPages("repos/" + repo + "/pulls/" + prNumber + "/files?per_page=100").map((file) => file.filename);
+  const files = apiPages("repos/" + repo + "/pulls/" + prNumber + "/files?per_page=100")
+    .flatMap((file) => [file.filename, file.previous_filename].filter(Boolean));
   const risky = riskyPaths(files);
   if (risky.length) humanRequired(prNumber, "Changes to protected paths: " + risky.join(", "));
   if (!files.length) humanRequired(prNumber, "PR has no changed files");
@@ -235,6 +253,7 @@ function finalReleasePR(issues) {
 }
 async function main() {
   ensureIntegrationBranch();
+  await awaitIntegrationCI();
   const issues = getIssues();
   if (!issues.length) throw new Error("Milestone has no issues; refusing to run");
   const prs = mapPRs(getPRs());
