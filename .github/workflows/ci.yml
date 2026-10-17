@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - main
+      - 'milestone/**'
   pull_request:
     branches:
       - main
+      - 'milestone/**'
 
 permissions:
   contents: read
@@ -39,6 +41,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Verify autopilot safety invariants
+        run: node --test scripts/autopilot-core.test.mjs
 
       - name: Verify repository
         run: pnpm verify
