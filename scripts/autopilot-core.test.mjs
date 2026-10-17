@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { dependenciesFromBody, selectNext, reviewForSha, riskyPaths, qualityStatus } from "./autopilot-core.mjs";
 
 test("extracts multiple issue dependencies without unrelated links", () => {
