@@ -59,7 +59,7 @@ Monitor Actions runs, integration PRs, and the final release PR. The workflow ha
 ## Local tests
 
 ```bash
-node --test scripts/autopilot-core.test.mjs
+pnpm exec vitest run scripts/autopilot-core.test.mjs
 ```
 
 This covers dependency parsing, deterministic scheduling, SHA-bound review verification, protected paths and CI gate behavior. End-to-end testing requires a GitHub repository, GitHub App/PAT credentials and a model API key.
