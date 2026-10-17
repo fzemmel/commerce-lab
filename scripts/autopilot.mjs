@@ -19,7 +19,7 @@ if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is requir
 function run(binary, args, options = {}) {
   const result = spawnSync(binary, args, {
     encoding: "utf8",
-    env: { ...process.env, ...options.env },
+    env: options.cleanEnv ? options.env : { ...process.env, ...options.env },
     timeout: options.timeout || 120000,
     maxBuffer: 16 * 1024 * 1024
   });
@@ -63,6 +63,7 @@ function invokeOpenCode(agent, prompt, selectedModel = model) {
   }
   const output = run("opencode", ["run", "--agent", agent, "--model", selectedModel, prompt], {
     env,
+    cleanEnv: true,
     timeout: 45 * 60 * 1000
   });
   if (!output) throw new Error("Empty OpenCode response");
