@@ -44,7 +44,7 @@ jobs:
           npm install --global 'opencode-ai@^1'
 
       - name: Test scheduling and quality gates
-        run: node --test scripts/autopilot-core.test.mjs
+        run: pnpm exec vitest run scripts/autopilot-core.test.mjs
 
       - name: Process one issue and queue next iteration
         env:
