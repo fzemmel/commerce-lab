@@ -63,6 +63,6 @@ export function qualityStatus(checkRuns) {
   const checks = (checkRuns || []).filter((check) => check.name === "Quality checks");
   if (!checks.length) return "PENDING";
   const latest = checks.sort((a, b) => (b.id || 0) - (a.id || 0))[0];
-  if (latest.status !== "completed") return "PENDING";
-  return latest.conclusion === "success" ? "SUCCESS" : "FAILED";
+  if (String(latest.status).toLowerCase() !== "completed") return "PENDING";
+  return String(latest.conclusion).toLowerCase() === "success" ? "SUCCESS" : "FAILED";
 }
