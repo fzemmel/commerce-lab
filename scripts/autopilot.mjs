@@ -172,7 +172,8 @@ function buildIssue(issue) {
   const prBody = "Autonomous implementation of #" + issue.number +
     " into " + target + ".\n\nSource issue: #" + issue.number +
     "\n\nRequires: current-HEAD Mistral approval, CI Quality checks, protected-path policy.\n\n" +
-    "No deployment or merge into main is permitted by this controller.";
+    "No deployment or merge into main is permitted by this controller.\n\n" +
+    "<!-- autopilot-base-sha=" + git("rev-parse", "refs/remotes/origin/" + target) + " -->";
   gh("pr", "create", "--base", target, "--head", issueBranch(issue.number),
     "--title", "feat(autopilot): " + issue.title.slice(0, 100), "--body", prBody, "--draft");
   const pr = apiPages("repos/" + repo + "/pulls?state=open&base=" + target + "&per_page=100")
@@ -216,7 +217,13 @@ async function completePR(pr) {
     const current = api("repos/" + repo + "/pulls/" + pr.number);
     if (current.head.sha !== gate.sha) continue;
     if (gate.verdict === "APPROVE" && gate.quality === "SUCCESS") {
-      gh("pr", "ready", String(pr.number));
+      const baseSha = current.body?.match(/<!-- autopilot-base-sha=([a-f0-9]{40}) -->/)?.[1];
+      if (!baseSha) humanRequired(pr.number, "Missing trusted milestone base marker");
+      git("fetch", "origin", target);
+      if (git("rev-parse", "refs/remotes/origin/" + target) !== baseSha) {
+        humanRequired(pr.number, "Milestone branch changed during review; rebase and revalidate");
+      }
+      if (current.draft) gh("pr", "ready", String(pr.number));
       // GitHub merge protections still apply. Never merge to main.
       gh("pr", "merge", String(pr.number), "--squash", "--delete-branch");
       console.log("Integrated issue PR #" + pr.number + " at " + gate.sha);
