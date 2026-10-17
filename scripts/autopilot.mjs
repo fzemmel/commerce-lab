@@ -150,8 +150,12 @@ function planIssue(issue) {
     const response = invokeOpenCode("plan",
       "Act as an independent critical plan reviewer. Compare the following plan with the repository, architecture and issue. Give actionable feedback. End with exactly VERDICT: APPROVE or VERDICT: CHANGES_REQUESTED.\nIssue:\n" + task + "\nPlan:\n" + plan,
       reviewModel);
-    if (/^VERDICT: APPROVE\s*$/m.test(response) && !/^VERDICT: CHANGES_REQUESTED\s*$/m.test(response)) return plan;
-    if (!/^VERDICT: CHANGES_REQUESTED\s*$/m.test(response)) throw new Error("Invalid planning verdict");
+    const verdicts = [...response.matchAll(/^VERDICT: (APPROVE|CHANGES_REQUESTED)\s*$/gm)];
+    const finalLine = response.trim().split(/\r?\n/).at(-1)?.trim();
+    if (verdicts.length !== 1 || finalLine !== "VERDICT: " + verdicts[0][1]) {
+      throw new Error("Invalid planning verdict");
+    }
+    if (verdicts[0][1] === "APPROVE") return plan;
     plan = invokeOpenCode("plan",
       "Revise the complete implementation plan using this independent feedback. No file edits.\nIssue:\n" + task + "\nPrevious plan:\n" + plan + "\nReview:\n" + response);
   }
