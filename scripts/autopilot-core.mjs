@@ -45,7 +45,10 @@ export function reviewForSha(comments, sha) {
   if (!matches.length) return null;
   const body = matches[matches.length - 1].body;
   const verdicts = [...body.matchAll(/^VERDICT: (APPROVE|CHANGES_REQUESTED)\s*$/gm)];
-  if (verdicts.length !== 1) return { verdict: "INVALID", body };
+  const finalLine = body.trim().split(/\r?\n/).at(-1)?.trim();
+  if (verdicts.length !== 1 || finalLine !== "VERDICT: " + verdicts[0][1]) {
+    return { verdict: "INVALID", body };
+  }
   return { verdict: verdicts[0][1], body };
 }
 
