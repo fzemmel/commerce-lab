@@ -13,7 +13,7 @@ import {
 const repo = process.env.GITHUB_REPOSITORY;
 const milestone = Number(process.argv[2]);
 const token = process.env.AUTOPILOT_GH_TOKEN;
-const model = process.env.AUTOPILOT_MODEL || "anthropic/claude-sonnet-4-5";
+const model = process.env.AUTOPILOT_MODEL || "openai/gpt-5.6-terra";
 const reviewModel = process.env.AUTOPILOT_REVIEW_MODEL || model;
 const target = "milestone/" + milestone;
 const fixes = 3;
@@ -21,8 +21,6 @@ const fixes = 3;
 if (!repo || !Number.isSafeInteger(milestone) || milestone < 1 || !token) {
   throw new Error("GITHUB_REPOSITORY, numeric milestone and AUTOPILOT_GH_TOKEN are required");
 }
-if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is required");
-
 function run(binary, args, options = {}) {
   const result = spawnSync(binary, args, {
     encoding: "utf8",
