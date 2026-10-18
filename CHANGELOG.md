@@ -6,6 +6,11 @@ This changelog includes the private pre-release development history of the proje
 
 ## Unreleased
 
+### Changed
+
+- Switched milestone planning and implementation from an Anthropic API key to ChatGPT/Codex OAuth on a dedicated self-hosted runner.
+- Added an OpenCode OAuth preflight and documented the persistent runner setup and isolation requirements.
+
 ## 1.0.2 - 2026-10-18
 
 ### Added
