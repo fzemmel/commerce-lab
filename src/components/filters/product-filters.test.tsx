@@ -76,4 +76,56 @@ describe("ProductFilters", () => {
 
     expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("runner");
   });
+
+  it("applies a minimum price while retaining other query state and resetting pagination", async () => {
+    const user = userEvent.setup();
+    renderFilters({ q: "shirt", brands: [], categories: [], sort: "price-desc", page: 3 });
+
+    await user.type(screen.getByLabelText("Minimum price"), "50");
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(replace).toHaveBeenCalledWith("/products?ref=campaign&q=shirt&priceMin=50&sort=price-desc", { scroll: false });
+  });
+
+  it("applies both price bounds and resets pagination", async () => {
+    const user = userEvent.setup();
+    renderFilters({ q: "shirt", brands: [], categories: [], sort: "price-desc", page: 3 });
+
+    await user.type(screen.getByLabelText("Minimum price"), "50");
+    await user.type(screen.getByLabelText("Maximum price"), "120");
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(replace).toHaveBeenCalledWith("/products?ref=campaign&q=shirt&priceMin=50&priceMax=120&sort=price-desc", { scroll: false });
+  });
+
+  it("clears both price bounds while retaining other active filters", async () => {
+    const user = userEvent.setup();
+    currentSearchParams = "q=shirt&brand=Northline&priceMin=50&priceMax=120&sort=price-desc&page=3&ref=campaign";
+    renderFilters({ q: "shirt", brands: ["Northline"], categories: [], price: { min: 50, max: 120 }, sort: "price-desc", page: 3 });
+
+    await user.click(within(screen.getByRole("group", { name: "Price range" })).getByRole("button", { name: "Clear" }));
+
+    expect(replace).toHaveBeenCalledWith("/products?ref=campaign&q=shirt&brand=Northline&sort=price-desc", { scroll: false });
+  });
+
+  it("shows a validation error and does not navigate for reversed price bounds", async () => {
+    const user = userEvent.setup();
+    renderFilters({ q: "shirt", brands: [], categories: [], sort: "price-desc", page: 3 });
+
+    await user.type(screen.getByLabelText("Minimum price"), "120");
+    await user.type(screen.getByLabelText("Maximum price"), "50");
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(screen.getByRole("alert").textContent).toBe("Minimum price cannot be greater than maximum price.");
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("synchronizes price inputs when URL-derived query props change", () => {
+    const { rerender } = renderFilters({ q: "", brands: [], categories: [], price: { min: 50 }, sort: "name-asc", page: 1 });
+
+    rerender(<ProductFilters query={{ q: "", brands: [], categories: [], price: { min: 100, max: 200 }, sort: "name-asc", page: 1 }} {...options} />);
+
+    expect((screen.getByLabelText("Minimum price") as HTMLInputElement).value).toBe("100");
+    expect((screen.getByLabelText("Maximum price") as HTMLInputElement).value).toBe("200");
+  });
 });
