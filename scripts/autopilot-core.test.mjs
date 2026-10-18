@@ -5,6 +5,7 @@ import {
   selectNext,
   reviewForSha,
   planningVerdict,
+  shouldRetryPlanningReview,
   riskyPaths,
   requiresFullVerification,
   packageScriptsChanged,
@@ -51,6 +52,13 @@ test("accepts focused planning verdicts only as the final line", () => {
   assert.equal(planningVerdict("Workflow change required.\nVERDICT: BLOCKED"), "BLOCKED");
   assert.equal(planningVerdict("VERDICT: BLOCKED\nVERDICT: APPROVE"), "INVALID");
   assert.equal(planningVerdict("VERDICT: APPROVE\nTrailing text"), "INVALID");
+});
+
+test("retries only planning reviews that ended before any verdict", () => {
+  assert.equal(shouldRetryPlanningReview("I'll inspect the proposed changes."), true);
+  assert.equal(shouldRetryPlanningReview("VERDICT: BLOCKED\nVERDICT: APPROVE"), false);
+  assert.equal(shouldRetryPlanningReview("VERDICT: APPROVE\nTrailing text"), false);
+  assert.equal(shouldRetryPlanningReview("Verdict: approve"), true);
 });
 
 test("protects automation and deployment while allowing normal project changes", () => {

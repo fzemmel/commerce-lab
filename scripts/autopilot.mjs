@@ -8,6 +8,7 @@ import {
   selectNext,
   reviewForSha,
   planningVerdict,
+  shouldRetryPlanningReview,
   riskyPaths,
   requiresFullVerification,
   packageScriptsChanged,
@@ -186,16 +187,24 @@ function planIssue(issue) {
     "Read AGENTS.md, DESIGN.md and relevant source/tests. Produce a concrete minimal implementation plan with tests. Do not modify files. Task:\n" + task);
   logOpenCodeOutput("Implementation plan", plan);
   for (let iteration = 0; iteration < 2; iteration++) {
-    const response = invokeOpenCode("plan",
+    const reviewPrompt =
       "Act as an independent, scope-focused plan reviewer. Compare the plan with the repository, architecture and issue. " +
       "Return all material findings in this one review. Use BLOCKED only for contradictory or technically impossible requirements, " +
       "required changes to protected automation/credential/deployment files, material security or data-loss risk, or acceptance " +
       "criteria that cannot be verified. Use IMPLEMENT_WITH_NOTES for non-blocking omissions or implementation details that the " +
       "build agent can resolve. Do not block on optional polish or require the plan to pre-decide routine implementation details. " +
-      "End with exactly VERDICT: APPROVE, VERDICT: IMPLEMENT_WITH_NOTES, or VERDICT: BLOCKED.\nIssue:\n" + task + "\nPlan:\n" + plan,
-      reviewModel);
+      "End with exactly VERDICT: APPROVE, VERDICT: IMPLEMENT_WITH_NOTES, or VERDICT: BLOCKED.\nIssue:\n" + task + "\nPlan:\n" + plan;
+    let response = invokeOpenCode("plan", reviewPrompt, reviewModel);
     logOpenCodeOutput("Plan review " + (iteration + 1), response);
-    const verdict = planningVerdict(response);
+    let verdict = planningVerdict(response);
+    if (verdict === "INVALID" && shouldRetryPlanningReview(response)) {
+      response = invokeOpenCode("plan",
+        reviewPrompt + "\nYour previous response ended before providing a verdict. Return the complete review now, " +
+        "including the required final VERDICT line.\nIncomplete response:\n" + response,
+        reviewModel);
+      logOpenCodeOutput("Plan review " + (iteration + 1) + " retry", response);
+      verdict = planningVerdict(response);
+    }
     if (verdict === "INVALID") throw new Error("Invalid planning verdict");
     if (verdict === "APPROVE") return { plan, notes: "" };
     if (verdict === "IMPLEMENT_WITH_NOTES") return { plan, notes: response };
