@@ -9,6 +9,7 @@ Commerce Lab is a Next.js 16 App Router product-discovery application using Reac
 - `/` is the landing page.
 - `/products` is the searchable, filterable, paginated product listing.
 - `/products/[slug]` is a product detail page.
+- `/compare` displays selected products in a side-by-side comparison.
 
 The product listing and detail routes provide loading and error boundaries; the detail route also provides a not-found boundary.
 
@@ -35,7 +36,7 @@ URL search parameters
 
 ## Server and Client Component boundary
 
-Route pages and data-reading components are Server Components by default. Client Components are limited to browser interaction and navigation hooks. `ProductFilters` updates URL parameters; the changed URL causes the server route to render the resulting catalog state. Global client-side state is intentionally avoided.
+Route pages and data-reading components are Server Components by default. Client Components are limited to browser interaction and navigation hooks. `ProductFilters` updates URL parameters; the changed URL causes the server route to render the resulting catalog state. Global client-side state is intentionally avoided, except for comparison selection: `ComparisonProvider` stores validated product IDs only and persists them to session storage after hydration. The `/compare` route remains server-sourced and resolves those IDs against its catalog data.
 
 ## Module responsibilities
 
