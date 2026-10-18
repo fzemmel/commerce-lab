@@ -10,6 +10,9 @@ This changelog includes the private pre-release development history of the proje
 
 - Switched milestone planning and implementation from an Anthropic API key to ChatGPT/Codex OAuth on a dedicated self-hosted runner.
 - Added an OpenCode OAuth preflight and documented the persistent runner setup and isolation requirements.
+- Relaxed milestone guardrails so dependency, architecture and application configuration changes can be tested on disposable integration branches while workflow, credential and deployment infrastructure remains protected.
+- Replaced the three-pass plan approval loop with one blocker-focused revision opportunity and non-blocking implementation notes.
+- Added grouped plan/review logs and full frozen-install verification for dependency metadata changes.
 
 ## 1.0.2 - 2026-10-18
 

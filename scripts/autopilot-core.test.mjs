@@ -4,7 +4,10 @@ import {
   dependenciesFromBody,
   selectNext,
   reviewForSha,
+  planningVerdict,
   riskyPaths,
+  requiresFullVerification,
+  packageScriptsChanged,
   withoutCredentials,
   qualityStatus
 } from "./autopilot-core.mjs";
@@ -42,8 +45,38 @@ test("recognizes only bot reviews for current head", () => {
   assert.equal(reviewForSha([{ user: { login: "github-actions[bot]" }, body: body + "\nVERDICT: APPROVE" }], sha).verdict, "INVALID");
 });
 
-test("protects workflow and deployment changes", () => {
-  assert.deepEqual(riskyPaths(["src/app/page.tsx", ".github/workflows/ci.yml", "Dockerfile", "package.json"]), [".github/workflows/ci.yml", "Dockerfile", "package.json"]);
+test("accepts focused planning verdicts only as the final line", () => {
+  assert.equal(planningVerdict("Ready.\nVERDICT: APPROVE"), "APPROVE");
+  assert.equal(planningVerdict("Minor follow-ups.\nVERDICT: IMPLEMENT_WITH_NOTES"), "IMPLEMENT_WITH_NOTES");
+  assert.equal(planningVerdict("Workflow change required.\nVERDICT: BLOCKED"), "BLOCKED");
+  assert.equal(planningVerdict("VERDICT: BLOCKED\nVERDICT: APPROVE"), "INVALID");
+  assert.equal(planningVerdict("VERDICT: APPROVE\nTrailing text"), "INVALID");
+});
+
+test("protects automation and deployment while allowing normal project changes", () => {
+  assert.deepEqual(riskyPaths([
+    "src/app/page.tsx", ".github/workflows/ci.yml", "Dockerfile", "package.json",
+    "pnpm-lock.yaml", "DESIGN.md", "next.config.ts"
+  ]), [".github/workflows/ci.yml", "Dockerfile"]);
+});
+
+test("requires full verification for dependency metadata", () => {
+  assert.equal(requiresFullVerification(["src/app/page.tsx"]), false);
+  assert.equal(requiresFullVerification(["src/app/page.tsx", "package.json"]), true);
+  assert.equal(requiresFullVerification(["pnpm-lock.yaml"]), true);
+  assert.equal(requiresFullVerification(["next.config.ts"]), true);
+});
+
+test("allows dependency updates without allowing validation script rewrites", () => {
+  const before = { scripts: { check: "pnpm lint", verify: "pnpm check && pnpm build" }, dependencies: { react: "1" } };
+  assert.equal(packageScriptsChanged(before, {
+    ...before,
+    dependencies: { react: "2" }
+  }), false);
+  assert.equal(packageScriptsChanged(before, {
+    ...before,
+    scripts: { check: "true", verify: "true" }
+  }), true);
 });
 
 test("removes credentials from generated-code validation", () => {

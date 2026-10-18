@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 // Resume-safe, serial milestone delivery. GitHub PRs are the durable state.
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import {
   dependenciesFromBody,
   selectNext,
   reviewForSha,
+  planningVerdict,
   riskyPaths,
+  requiresFullVerification,
+  packageScriptsChanged,
   withoutCredentials,
   qualityStatus
 } from "./autopilot-core.mjs";
@@ -45,12 +50,17 @@ function apiPages(path) {
 function git(...args) {
   return run("git", args);
 }
-function checkRepository() {
-  return run("pnpm", ["check"], {
+function checkRepository(changedPaths) {
+  const options = {
     env: withoutCredentials(process.env),
     cleanEnv: true,
-    timeout: 15 * 60 * 1000
-  });
+    timeout: 30 * 60 * 1000
+  };
+  if (requiresFullVerification(changedPaths)) {
+    run("pnpm", ["install", "--frozen-lockfile"], options);
+    return run("pnpm", ["verify"], options);
+  }
+  return run("pnpm", ["check"], options);
 }
 function push(refspec) {
   // Only the controller, not the coding agent, receives credentials.
@@ -81,6 +91,14 @@ function invokeOpenCode(agent, prompt, selectedModel = model) {
   if (!output) throw new Error("Empty OpenCode response");
   return output.slice(-24000);
 }
+function logOpenCodeOutput(title, output) {
+  const marker = "autopilot-" + randomUUID();
+  console.log("::group::" + title);
+  console.log("::stop-commands::" + marker);
+  console.log(output);
+  console.log("::" + marker + "::");
+  console.log("::endgroup::");
+}
 function issueBranch(number) {
   return "autopilot/issue-" + number + "-milestone-" + milestone;
 }
@@ -103,6 +121,14 @@ function ensureSafeDiff() {
   if (!changed.length) throw new Error("Agent produced no file changes");
   const risky = riskyPaths(changed);
   if (risky.length) throw new Error("Protected files changed: " + risky.join(", "));
+  if (changed.includes("package.json")) {
+    const before = JSON.parse(git("show", "HEAD:package.json"));
+    const after = JSON.parse(readFileSync("package.json", "utf8"));
+    if (packageScriptsChanged(before, after)) {
+      throw new Error("Protected package.json scripts changed");
+    }
+  }
+  return changed;
 }
 async function awaitIntegrationCI() {
   git("fetch", "origin", target);
@@ -158,29 +184,41 @@ function planIssue(issue) {
   const task = "Issue #" + issue.number + ": " + issue.title + "\n" + (issue.body || "");
   let plan = invokeOpenCode("plan",
     "Read AGENTS.md, DESIGN.md and relevant source/tests. Produce a concrete minimal implementation plan with tests. Do not modify files. Task:\n" + task);
-  for (let iteration = 0; iteration < 3; iteration++) {
+  logOpenCodeOutput("Implementation plan", plan);
+  for (let iteration = 0; iteration < 2; iteration++) {
     const response = invokeOpenCode("plan",
-      "Act as an independent critical plan reviewer. Compare the following plan with the repository, architecture and issue. Give actionable feedback. End with exactly VERDICT: APPROVE or VERDICT: CHANGES_REQUESTED.\nIssue:\n" + task + "\nPlan:\n" + plan,
+      "Act as an independent, scope-focused plan reviewer. Compare the plan with the repository, architecture and issue. " +
+      "Return all material findings in this one review. Use BLOCKED only for contradictory or technically impossible requirements, " +
+      "required changes to protected automation/credential/deployment files, material security or data-loss risk, or acceptance " +
+      "criteria that cannot be verified. Use IMPLEMENT_WITH_NOTES for non-blocking omissions or implementation details that the " +
+      "build agent can resolve. Do not block on optional polish or require the plan to pre-decide routine implementation details. " +
+      "End with exactly VERDICT: APPROVE, VERDICT: IMPLEMENT_WITH_NOTES, or VERDICT: BLOCKED.\nIssue:\n" + task + "\nPlan:\n" + plan,
       reviewModel);
-    const verdicts = [...response.matchAll(/^VERDICT: (APPROVE|CHANGES_REQUESTED)\s*$/gm)];
-    const finalLine = response.trim().split(/\r?\n/).at(-1)?.trim();
-    if (verdicts.length !== 1 || finalLine !== "VERDICT: " + verdicts[0][1]) {
-      throw new Error("Invalid planning verdict");
-    }
-    if (verdicts[0][1] === "APPROVE") return plan;
+    logOpenCodeOutput("Plan review " + (iteration + 1), response);
+    const verdict = planningVerdict(response);
+    if (verdict === "INVALID") throw new Error("Invalid planning verdict");
+    if (verdict === "APPROVE") return { plan, notes: "" };
+    if (verdict === "IMPLEMENT_WITH_NOTES") return { plan, notes: response };
+    if (iteration === 1) throw new Error("Plan remains blocked after one revision");
     plan = invokeOpenCode("plan",
-      "Revise the complete implementation plan using this independent feedback. No file edits.\nIssue:\n" + task + "\nPrevious plan:\n" + plan + "\nReview:\n" + response);
+      "Revise the complete implementation plan to resolve every valid blocker in this independent feedback. " +
+      "Keep routine implementation decisions concise. No file edits.\nIssue:\n" + task + "\nPrevious plan:\n" + plan + "\nReview:\n" + response);
+    logOpenCodeOutput("Revised implementation plan", plan);
   }
-  throw new Error("Plan failed independent review after three iterations");
+  throw new Error("Planning ended without a usable verdict");
 }
 function buildIssue(issue) {
-  const plan = planIssue(issue);
-  invokeOpenCode("build",
+  const { plan, notes } = planIssue(issue);
+  const implementation = invokeOpenCode("build",
     "Implement GitHub issue #" + issue.number + " within its acceptance criteria. Use this reviewed plan:\n" +
     plan + "\nIssue body:\n" + (issue.body || "") +
-    "\nWrite meaningful regression tests. Do not commit, push, open PRs, modify workflows, agent tooling, package manifests, deployment settings, credentials or other protected files. Do not weaken existing tests. Run pnpm check and fix failures. Leave changes in the working tree.");
-  ensureSafeDiff();
-  checkRepository();
+    (notes ? "\nAddress these non-blocking review notes where applicable:\n" + notes : "") +
+    "\nWrite meaningful regression tests. Do not commit, push, open PRs, modify workflows, autopilot/agent tooling, deployment settings, credentials or other protected files. " +
+    "Package manifests, lockfiles, architecture documentation and application configuration may be changed when the issue requires them. " +
+    "Do not weaken existing tests. Run relevant checks and leave changes in the working tree.");
+  logOpenCodeOutput("Implementation result", implementation);
+  const changed = ensureSafeDiff();
+  checkRepository(changed);
   git("config", "user.name", "commerce-lab-autopilot");
   git("config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com");
   git("commit", "-m", "feat: implement issue #" + issue.number);
@@ -249,12 +287,13 @@ async function completePR(pr) {
     if (gate.verdict === "INVALID") humanRequired(pr.number, "Invalid structured Mistral verdict");
     git("fetch", "origin", issueBranchFromPR(pr));
     git("checkout", "-B", issueBranchFromPR(pr), "origin/" + issueBranchFromPR(pr));
-    invokeOpenCode("build",
+    const correction = invokeOpenCode("build",
       "Correct the following independent review/CI findings for the current PR without changing its scope. " +
       "Do not alter protected files or tests to hide failures. Review:\n" + gate.feedback.slice(0, 12000) +
       "\nCI quality status: " + gate.quality + ". Run pnpm check. Do not commit or push.");
-    ensureSafeDiff();
-    checkRepository();
+    logOpenCodeOutput("Implementation correction " + (iteration + 1), correction);
+    const changed = ensureSafeDiff();
+    checkRepository(changed);
     git("config", "user.name", "commerce-lab-autopilot");
     git("config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com");
     git("commit", "-m", "fix: address independent review for PR #" + pr.number);
