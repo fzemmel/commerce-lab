@@ -5,7 +5,7 @@ import { ProductFilters } from "@/components/filters/product-filters";
 import { ProductGrid } from "@/components/product/product-grid";
 import { ProductPagination } from "@/components/product/product-pagination";
 import { buttonVariants } from "@/components/ui/button";
-import { getCategoryOptions, paginateProducts, parseProductQuery, queryProducts, type ProductSearchParams } from "@/lib/product-query";
+import { getBrandOptions, getCategoryOptions, paginateProducts, parseProductQuery, queryProducts, type ProductSearchParams } from "@/lib/product-query";
 import { getProductCatalog } from "@/lib/products-api";
 
 type ProductsPageProps = {
@@ -14,14 +14,17 @@ type ProductsPageProps = {
 
 export default async function ProductsPage({ searchParams }: ProductsPageProps) {
   const catalog = await getProductCatalog();
+  const rawSearchParams = await searchParams;
+  const brandOptions = getBrandOptions(catalog.products);
   const categoryOptions = getCategoryOptions(catalog.products);
   const query = parseProductQuery(
-    await searchParams,
+    rawSearchParams,
+    brandOptions.map((option) => option.value),
     categoryOptions.map((option) => option.value),
   );
   const results = queryProducts(query, catalog.products);
   const pagination = paginateProducts(results, query.page);
-  const hasFilters = query.q.length > 0 || query.category !== "all" || query.sort !== "name-asc" || pagination.page > 1;
+  const hasFilters = query.q.length > 0 || query.brands.length > 0 || query.categories.length > 0 || query.sort !== "name-asc" || pagination.page > 1;
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
@@ -30,13 +33,13 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-200">Product listing</p>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-5xl">Searchable commerce catalog</h1>
           <p className="mt-4 text-slate-300">
-            Search, category filtering, and sorting are reflected in the URL so the listing is shareable, reload-safe, and server-rendered from route state.
+            Search, brand and category filtering, and sorting are reflected in the URL so the listing is shareable, reload-safe, and server-rendered from route state.
           </p>
         </div>
       </section>
 
       <Suspense fallback={<FilterSkeleton />}>
-        <ProductFilters query={query} categoryOptions={categoryOptions} />
+        <ProductFilters query={query} brandOptions={brandOptions} categoryOptions={categoryOptions} />
       </Suspense>
 
       {catalog.source === "fallback" ? (
@@ -70,13 +73,13 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
       {results.length > 0 ? (
         <>
           <ProductGrid products={pagination.items} />
-          <ProductPagination query={query} currentPage={pagination.page} totalPages={pagination.totalPages} />
+          <ProductPagination query={query} searchParams={rawSearchParams} currentPage={pagination.page} totalPages={pagination.totalPages} />
         </>
       ) : (
         <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center">
           <h2 className="text-2xl font-semibold tracking-tight">No products found</h2>
           <p className="mx-auto mt-3 max-w-xl text-slate-600">
-            Try a broader search term, remove the category filter, or reset the listing to the default catalog view.
+            Try a broader search term, remove one or more filters, or reset the listing to the default catalog view.
           </p>
           <Link href="/products" className={buttonVariants({ variant: "primary", className: "mt-6" })}>
             Reset product listing
