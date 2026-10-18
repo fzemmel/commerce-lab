@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { CompareButton } from "@/components/comparison/compare-button";
 import { ProductBadges } from "@/components/product/product-badges";
 import { ProductImage } from "@/components/product/product-image";
 import { ProductPrice } from "@/components/product/product-price";
@@ -42,6 +43,9 @@ export function ProductCard({ product }: ProductCardProps) {
           </div>
         </div>
       </Link>
+      <div className="px-5 pb-5">
+        <CompareButton productId={product.id} />
+      </div>
     </article>
   );
 }
