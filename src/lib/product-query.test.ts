@@ -87,6 +87,22 @@ describe("parseProductQuery", () => {
   it("falls back for invalid sort and page values", () => {
     expect(parseProductQuery({ sort: "unknown", page: "0" })).toEqual(defaultQuery);
   });
+
+  it("parses minimum-only, maximum-only, and bounded price ranges", () => {
+    expect(parseProductQuery({ priceMin: "50" })).toEqual({ ...defaultQuery, price: { min: 50 } });
+    expect(parseProductQuery({ priceMax: "120" })).toEqual({ ...defaultQuery, price: { max: 120 } });
+    expect(parseProductQuery({ priceMin: "50", priceMax: "120" })).toEqual({ ...defaultQuery, price: { min: 50, max: 120 } });
+  });
+
+  it("ignores invalid price bounds and reversed price ranges", () => {
+    ["", "not-a-number", "NaN", "Infinity", "0", "-10"].forEach((value) => {
+      expect(parseProductQuery({ priceMin: value })).toEqual(defaultQuery);
+      expect(parseProductQuery({ priceMax: value })).toEqual(defaultQuery);
+    });
+
+    expect(parseProductQuery({ priceMin: "50", priceMax: "invalid" })).toEqual({ ...defaultQuery, price: { min: 50 } });
+    expect(parseProductQuery({ priceMin: "200", priceMax: "100" })).toEqual(defaultQuery);
+  });
 });
 
 describe("product query serialization", () => {
@@ -100,13 +116,21 @@ describe("product query serialization", () => {
     ).toBe("q=shirt&brand=Northline%2CMotion+Lab&category=apparel&sort=price-desc&page=2");
   });
 
+  it("serializes valid price bounds and omits invalid ranges", () => {
+    expect(serializeProductQuery({ ...defaultQuery, price: { min: 50 } }).toString()).toBe("priceMin=50");
+    expect(serializeProductQuery({ ...defaultQuery, price: { max: 120 } }).toString()).toBe("priceMax=120");
+    expect(serializeProductQuery({ ...defaultQuery, price: { min: 50, max: 120 } }).toString()).toBe("priceMin=50&priceMax=120");
+    expect(serializeProductQuery({ ...defaultQuery, price: { min: 120, max: 50 } }).toString()).toBe("");
+  });
+
   it("preserves unrelated parameters while replacing known query values", () => {
-    const params = applyProductQueryToSearchParams(new URLSearchParams("ref=campaign&brand=unknown&page=8"), {
+    const params = applyProductQueryToSearchParams(new URLSearchParams("ref=campaign&brand=unknown&priceMin=10&priceMax=20&page=8"), {
       ...defaultQuery,
       brands: ["Northline"],
+      price: { min: 50, max: 120 },
     });
 
-    expect(params.toString()).toBe("ref=campaign&brand=Northline");
+    expect(params.toString()).toBe("ref=campaign&brand=Northline&priceMin=50&priceMax=120");
   });
 });
 
@@ -129,10 +153,16 @@ describe("queryProducts", () => {
   it("combines facets, search, and sorting using AND", () => {
     expect(
       queryProducts(
-        { q: "daily", brands: ["Carry Studio", "Northline"], categories: ["accessories", "apparel"], sort: "price-desc", page: 1 },
+        { q: "daily", brands: ["Carry Studio", "Northline"], categories: ["accessories", "apparel"], price: { min: 40, max: 40 }, sort: "price-desc", page: 1 },
         catalog,
       ).map((product) => product.slug),
     ).toEqual(["carry-tote"]);
+  });
+
+  it("filters inclusively by minimum-only, maximum-only, and bounded prices", () => {
+    expect(queryProducts({ ...defaultQuery, price: { min: 50 } }, catalog).map((product) => product.slug)).toEqual(["alpha-shirt", "bravo-runner"]);
+    expect(queryProducts({ ...defaultQuery, price: { max: 50 } }, catalog).map((product) => product.slug)).toEqual(["alpha-shirt", "carry-tote"]);
+    expect(queryProducts({ ...defaultQuery, price: { min: 50, max: 120 } }, catalog).map((product) => product.slug)).toEqual(["alpha-shirt", "bravo-runner"]);
   });
 
   it("sorts by name ascending by default and does not mutate the catalog", () => {

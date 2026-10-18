@@ -4,10 +4,16 @@ export type ProductSort = "name-asc" | "price-asc" | "price-desc" | "rating-desc
 
 export const PRODUCTS_PER_PAGE = 24;
 
+export type PriceRange = {
+  min?: number;
+  max?: number;
+};
+
 export type ProductQuery = {
   q: string;
   brands: string[];
   categories: ProductCategory[];
+  price?: PriceRange;
   sort: ProductSort;
   page: number;
 };
@@ -58,6 +64,30 @@ function parsePage(value: SearchParamValue) {
   return Number.isFinite(page) && page > 0 ? page : 1;
 }
 
+export function parsePositivePrice(value: SearchParamValue | number) {
+  const price = typeof value === "number" ? value : Number(firstParam(value));
+
+  return Number.isFinite(price) && price > 0 ? price : undefined;
+}
+
+export function parsePriceRange(minValue: SearchParamValue | number, maxValue: SearchParamValue | number): PriceRange | undefined {
+  const min = parsePositivePrice(minValue);
+  const max = parsePositivePrice(maxValue);
+
+  if (min !== undefined && max !== undefined && min > max) {
+    return undefined;
+  }
+
+  if (min === undefined && max === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...(min !== undefined ? { min } : {}),
+    ...(max !== undefined ? { max } : {}),
+  };
+}
+
 export function formatCategoryLabel(category: ProductCategory) {
   return category
     .split(/[-_\s]+/)
@@ -73,11 +103,13 @@ export function parseProductQuery(
 ): ProductQuery {
   const q = firstParam(searchParams.q)?.trim() ?? "";
   const sort = firstParam(searchParams.sort);
+  const price = parsePriceRange(searchParams.priceMin, searchParams.priceMax);
 
   return {
     q,
     brands: parseFacetValues(searchParams.brand, validBrands),
     categories: parseFacetValues(searchParams.category, validCategories),
+    ...(price ? { price } : {}),
     sort: sort && sortValues.includes(sort as ProductSort) ? (sort as ProductSort) : "name-asc",
     page: parsePage(searchParams.page),
   };
@@ -101,6 +133,16 @@ export function serializeProductQuery(query: ProductQuery) {
     params.set("category", categories.join(","));
   }
 
+  const price = parsePriceRange(query.price?.min, query.price?.max);
+
+  if (price?.min !== undefined) {
+    params.set("priceMin", String(price.min));
+  }
+
+  if (price?.max !== undefined) {
+    params.set("priceMax", String(price.max));
+  }
+
   if (query.sort !== "name-asc") {
     params.set("sort", query.sort);
   }
@@ -115,7 +157,7 @@ export function serializeProductQuery(query: ProductQuery) {
 export function applyProductQueryToSearchParams(searchParams: Pick<URLSearchParams, "toString">, query: ProductQuery) {
   const params = new URLSearchParams(searchParams.toString());
 
-  ["q", "brand", "category", "sort", "page"].forEach((key) => params.delete(key));
+  ["q", "brand", "category", "priceMin", "priceMax", "sort", "page"].forEach((key) => params.delete(key));
   serializeProductQuery(query).forEach((value, key) => params.set(key, value));
 
   return params;
@@ -139,6 +181,7 @@ export function getProductBySlug(slug: string, catalog: Product[]) {
 
 export function queryProducts(query: ProductQuery, catalog: Product[]) {
   const search = query.q.toLowerCase();
+  const price = parsePriceRange(query.price?.min, query.price?.max);
 
   return catalog
     .filter((product) => {
@@ -146,8 +189,10 @@ export function queryProducts(query: ProductQuery, catalog: Product[]) {
       const matchesCategory = query.categories.length === 0 || query.categories.includes(product.category);
       const searchable = `${product.name} ${product.brand} ${product.description}`.toLowerCase();
       const matchesSearch = search.length === 0 || searchable.includes(search);
+      const matchesMinimumPrice = price?.min === undefined || product.price >= price.min;
+      const matchesMaximumPrice = price?.max === undefined || product.price <= price.max;
 
-      return matchesBrand && matchesCategory && matchesSearch;
+      return matchesBrand && matchesCategory && matchesSearch && matchesMinimumPrice && matchesMaximumPrice;
     })
     .toSorted((a, b) => {
       switch (query.sort) {

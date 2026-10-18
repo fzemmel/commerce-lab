@@ -24,7 +24,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   );
   const results = queryProducts(query, catalog.products);
   const pagination = paginateProducts(results, query.page);
-  const hasFilters = query.q.length > 0 || query.brands.length > 0 || query.categories.length > 0 || query.sort !== "name-asc" || pagination.page > 1;
+  const hasFilters = query.q.length > 0 || query.brands.length > 0 || query.categories.length > 0 || query.price !== undefined || query.sort !== "name-asc" || pagination.page > 1;
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
@@ -33,7 +33,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-200">Product listing</p>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-5xl">Searchable commerce catalog</h1>
           <p className="mt-4 text-slate-300">
-            Search, brand and category filtering, and sorting are reflected in the URL so the listing is shareable, reload-safe, and server-rendered from route state.
+            Search, brand, category, and price filtering, plus sorting, are reflected in the URL so the listing is shareable, reload-safe, and server-rendered from route state.
           </p>
         </div>
       </section>
