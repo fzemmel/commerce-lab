@@ -106,9 +106,9 @@ jobs:
           if [ "$TRUNCATED" = true ]; then
             REVIEW="Diff exceeds review size limit; split the PR for a complete review.
 
-VERDICT: CHANGES_REQUESTED"
+          VERDICT: CHANGES_REQUESTED"
           fi
           # Identifiable reviews prevent stale approvals from unlocking a new commit.
           REVIEW_MARKER="<!-- mistral-review sha=$PR_HEAD_SHA -->"
           gh pr comment "$PR_NUMBER" --body "$REVIEW_MARKER
-$REVIEW"
+          $REVIEW"
