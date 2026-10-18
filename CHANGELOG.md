@@ -6,17 +6,30 @@ This changelog includes the private pre-release development history of the proje
 
 ## Unreleased
 
+## 1.0.2 - 2026-10-18
+
 ### Added
 
 - Added canonical type-checking and repository validation commands.
 - Added a compact architecture reference in `DESIGN.md`.
 - Added a Node.js 22 declaration for local development and automation.
+- Added an opt-in milestone autopilot that plans, implements, reviews, tests, and integrates GitHub issues on isolated milestone branches.
+- Added dependency-aware issue scheduling, resumable pull request processing, protected-path enforcement, and SHA-bound review gates.
+- Added automated Mistral pull request reviews with architecture and source-issue context.
+- Added focused tests and operating documentation for the milestone autopilot.
 
 ### Changed
 
-- Aligned the `package.json` project version with the current public release line so local package metadata matches the latest published release.
+- Updated Next.js, React, Storybook, and supporting development dependencies.
+- Extended CI validation to milestone branches and autopilot safety invariants.
 - Simplified and updated agent instructions.
 - Restricted package publishing permissions to the production deployment job.
+
+### Security
+
+- Isolated repository credentials from agent subprocesses and generated-code validation.
+- Required current-HEAD review approval and successful quality checks before automated milestone integration.
+- Kept release merges to `main` and production deployment behind explicit human approval.
 
 ## 1.0.1 - 2026-07-11
 
