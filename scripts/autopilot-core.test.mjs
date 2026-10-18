@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { dependenciesFromBody, selectNext, reviewForSha, riskyPaths, qualityStatus } from "./autopilot-core.mjs";
+import {
+  dependenciesFromBody,
+  selectNext,
+  reviewForSha,
+  riskyPaths,
+  withoutCredentials,
+  qualityStatus
+} from "./autopilot-core.mjs";
 
 test("extracts multiple issue dependencies without unrelated links", () => {
   assert.deepEqual(dependenciesFromBody("Depends on #31, #32, and #33.\nOther: #91"), [31, 32, 33]);
@@ -37,6 +44,17 @@ test("recognizes only bot reviews for current head", () => {
 
 test("protects workflow and deployment changes", () => {
   assert.deepEqual(riskyPaths(["src/app/page.tsx", ".github/workflows/ci.yml", "Dockerfile", "package.json"]), [".github/workflows/ci.yml", "Dockerfile", "package.json"]);
+});
+
+test("removes credentials from generated-code validation", () => {
+  assert.deepEqual(withoutCredentials({
+    PATH: "/usr/bin",
+    CI: "true",
+    AUTOPILOT_GH_TOKEN: "github-token",
+    ANTHROPIC_API_KEY: "model-key",
+    DEPLOY_SSH_PRIVATE_KEY: "private-key",
+    DATABASE_PASSWORD: "password"
+  }), { PATH: "/usr/bin", CI: "true" });
 });
 
 test("fails closed for missing or failed checks", () => {

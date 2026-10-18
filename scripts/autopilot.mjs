@@ -1,7 +1,14 @@
 #!/usr/bin/env node
 // Resume-safe, serial milestone delivery. GitHub PRs are the durable state.
 import { spawnSync } from "node:child_process";
-import { dependenciesFromBody, selectNext, reviewForSha, riskyPaths, qualityStatus } from "./autopilot-core.mjs";
+import {
+  dependenciesFromBody,
+  selectNext,
+  reviewForSha,
+  riskyPaths,
+  withoutCredentials,
+  qualityStatus
+} from "./autopilot-core.mjs";
 
 const repo = process.env.GITHUB_REPOSITORY;
 const milestone = Number(process.argv[2]);
@@ -39,6 +46,13 @@ function apiPages(path) {
 }
 function git(...args) {
   return run("git", args);
+}
+function checkRepository() {
+  return run("pnpm", ["check"], {
+    env: withoutCredentials(process.env),
+    cleanEnv: true,
+    timeout: 15 * 60 * 1000
+  });
 }
 function push(refspec) {
   // Only the controller, not the coding agent, receives credentials.
@@ -168,7 +182,7 @@ function buildIssue(issue) {
     plan + "\nIssue body:\n" + (issue.body || "") +
     "\nWrite meaningful regression tests. Do not commit, push, open PRs, modify workflows, agent tooling, package manifests, deployment settings, credentials or other protected files. Do not weaken existing tests. Run pnpm check and fix failures. Leave changes in the working tree.");
   ensureSafeDiff();
-  run("pnpm", ["check"], { timeout: 15 * 60 * 1000 });
+  checkRepository();
   git("config", "user.name", "commerce-lab-autopilot");
   git("config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com");
   git("commit", "-m", "feat: implement issue #" + issue.number);
@@ -242,7 +256,7 @@ async function completePR(pr) {
       "Do not alter protected files or tests to hide failures. Review:\n" + gate.feedback.slice(0, 12000) +
       "\nCI quality status: " + gate.quality + ". Run pnpm check. Do not commit or push.");
     ensureSafeDiff();
-    run("pnpm", ["check"], { timeout: 15 * 60 * 1000 });
+    checkRepository();
     git("config", "user.name", "commerce-lab-autopilot");
     git("config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com");
     git("commit", "-m", "fix: address independent review for PR #" + pr.number);

@@ -62,6 +62,13 @@ export function riskyPaths(paths) {
   return paths.filter((path) => protectedPaths.some((rule) => rule.test(path)));
 }
 
+const credentialName = /(?:api_key|authorization|credential|password|private_key|secret|token)/i;
+export function withoutCredentials(environment) {
+  return Object.fromEntries(
+    Object.entries(environment).filter(([name]) => !credentialName.test(name))
+  );
+}
+
 export function qualityStatus(checkRuns) {
   const checks = (checkRuns || []).filter((check) => check.name === "Quality checks");
   if (!checks.length) return "PENDING";
