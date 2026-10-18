@@ -52,14 +52,31 @@ export function reviewForSha(comments, sha) {
   return { verdict: verdicts[0][1], body };
 }
 
+export function planningVerdict(response) {
+  const verdicts = [...response.matchAll(/^VERDICT: (APPROVE|IMPLEMENT_WITH_NOTES|BLOCKED)\s*$/gm)];
+  const finalLine = response.trim().split(/\r?\n/).at(-1)?.trim();
+  if (verdicts.length !== 1 || finalLine !== "VERDICT: " + verdicts[0][1]) return "INVALID";
+  return verdicts[0][1];
+}
+
 const protectedPaths = [
   /^\.github\//, /^\.opencode\//, /^scripts\/autopilot/, /^\.env(?:\.|$)/,
-  /^AGENTS\.md$/, /^DESIGN\.md$/, /^package\.json$/, /^pnpm-lock\.yaml$/,
-  /^Dockerfile/, /^docker-compose/, /^next\.config\./, /^\.npmrc$/,
+  /^AGENTS\.md$/, /^Dockerfile/, /^docker-compose/, /^\.npmrc$/,
   /^\.gitmodules$/, /^\.gitattributes$/
 ];
 export function riskyPaths(paths) {
   return paths.filter((path) => protectedPaths.some((rule) => rule.test(path)));
+}
+
+export function requiresFullVerification(paths) {
+  return paths.some((path) =>
+    /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|next\.config\.)/.test(path)
+  );
+}
+
+export function packageScriptsChanged(before, after) {
+  const normalize = (scripts) => Object.entries(scripts || {}).sort(([left], [right]) => left.localeCompare(right));
+  return JSON.stringify(normalize(before.scripts)) !== JSON.stringify(normalize(after.scripts));
 }
 
 const credentialName = /(?:api_key|authorization|credential|password|private_key|secret|token)/i;

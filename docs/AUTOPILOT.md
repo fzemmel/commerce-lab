@@ -8,8 +8,8 @@ This is an **opt-in** GitHub Actions workflow for delivering a GitHub milestone 
 2. The controller creates `milestone/<number>` from `main` if needed.
 3. It waits for green CI on that integration branch, loads all milestone issues, and resolves GitHub's native *blocked by* dependencies plus `Depends on #123, #124` body references.
 4. It selects one unblocked issue. Closed issues and issues already merged through an autopilot PR are considered completed; blocked issues are not.
-5. OpenCode v1 uses the runner's persistent ChatGPT/Codex OAuth session to create a plan, independently review it (up to three iterations), and implement the approved plan on `autopilot/issue-<issue>-milestone-<milestone>`.
-6. The controller runs `pnpm check`, rejects changes to protected paths, commits and pushes, and creates a draft PR against the milestone branch.
+5. OpenCode v1 uses the runner's persistent ChatGPT/Codex OAuth session to create a plan and review it independently. A hard blocker gets one plan revision and a second review; non-blocking notes are passed directly to implementation.
+6. The controller logs plans and reviews, implements on `autopilot/issue-<issue>-milestone-<milestone>`, rejects changes to protected infrastructure, validates the result, commits and pushes, and creates a draft PR against the milestone branch.
 7. Mistral evaluates that PR against the source issue, `AGENTS.md`, `DESIGN.md`, code and tests. The review includes a machine verdict and the **exact PR head SHA**.
 8. The controller waits for that SHA's Mistral review and GitHub's **Quality checks** check. It corrects failures up to three times, verifying each new revision. Missing, malformed or stale approvals fail closed.
 9. A passing PR is merged **only into the milestone branch**. The workflow dispatches the next run; GitHub PR state makes re-runs resume safely.
@@ -52,7 +52,10 @@ Monitor Actions runs, integration PRs, and the final release PR. The workflow ha
 - Never automatically targets `main`; deployment remains behind an explicit human merge.
 - Only GitHub's `Quality checks` check and a valid independent Mistral verdict for the exact current PR head SHA can authorize an integration merge.
 - Each integration branch must also pass its own CI after the prior issue's merge.
-- Protected files such as `.github/**`, `.opencode/**`, `scripts/autopilot*`, `AGENTS.md`, `DESIGN.md`, package manifests, lockfiles and deployment configuration cannot be autonomously merged.
+- Protected infrastructure such as `.github/**`, `.opencode/**`, `scripts/autopilot*`, `AGENTS.md`, credentials and deployment configuration cannot be autonomously merged.
+- Normal project changes may include package dependencies, lockfiles, `DESIGN.md` and application configuration. Validation and lifecycle scripts in `package.json` remain immutable. Dependency metadata or `next.config.*` changes trigger `pnpm install --frozen-lockfile` followed by `pnpm verify`; other changes run `pnpm check` before the PR is created.
+- Planning reviews return `APPROVE`, `IMPLEMENT_WITH_NOTES` or `BLOCKED`. Only contradictory or impossible requirements, protected-infrastructure changes, material security/data-loss risks, or unverifiable acceptance criteria may block planning.
+- Plans and review feedback are included in grouped Actions logs with workflow-command parsing disabled for their untrusted content.
 - Excessive/truncated diffs cannot receive autonomous Mistral approval.
 - Reviewer comments are accepted only from `github-actions[bot]`. A malformed verdict, failed CI, unsafe files or exhausted fix attempts block the PR and require manual intervention.
 - No silent fallback when GitHub's dependency API is unavailable.
@@ -62,9 +65,9 @@ Monitor Actions runs, integration PRs, and the final release PR. The workflow ha
 
 - This first version is **sequential**; it does not parallelize independent issues.
 - The dedicated self-hosted runner must remain online for every continuation run and retain the OpenCode OAuth session. If the session expires, run `opencode auth login` again as the runner user and manually restart the workflow.
-- It performs existing `pnpm check` and `pnpm verify` gates, but does not add a dedicated E2E suite. Feature-specific regression coverage must be requested and verified separately.
+- It performs `pnpm check` for normal changes and `pnpm verify` when dependency metadata changes, but does not add a dedicated E2E suite. Feature-specific regression coverage must be requested and verified separately.
 - There is a fixed three-fix maximum, but **no hard USD/token budget enforcement**. Monitor model costs.
-- A run will halt if an issue requires agent changes to protected infrastructure or architecture files; those changes need human review.
+- A run will halt if an issue requires changes to protected automation, credential or deployment infrastructure; those changes need human review.
 - The full release PR and deployment still require manual approval. Green CI and an AI reviewer do not prove the absence of functional, security or architectural defects.
 - Session IDs are not retained across GitHub Actions runs; fixes are resumed from the PR, issue, repository state and independent review feedback rather than from the previous model session.
 
@@ -74,4 +77,4 @@ Monitor Actions runs, integration PRs, and the final release PR. The workflow ha
 pnpm exec vitest run scripts/autopilot-core.test.mjs
 ```
 
-This covers dependency parsing, deterministic scheduling, SHA-bound review verification, protected paths and CI gate behavior. End-to-end testing requires a GitHub repository, GitHub App/PAT credentials, a dedicated self-hosted runner and an active OpenCode ChatGPT/Codex OAuth session.
+This covers dependency parsing, deterministic scheduling, planning verdicts, validation selection, SHA-bound review verification, protected paths and CI gate behavior. End-to-end testing requires a GitHub repository, GitHub App/PAT credentials, a dedicated self-hosted runner and an active OpenCode ChatGPT/Codex OAuth session.
