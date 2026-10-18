@@ -59,6 +59,10 @@ export function planningVerdict(response) {
   return verdicts[0][1];
 }
 
+export function shouldRetryPlanningReview(response) {
+  return !/^VERDICT:/m.test(response);
+}
+
 const protectedPaths = [
   /^\.github\//, /^\.opencode\//, /^scripts\/autopilot/, /^\.env(?:\.|$)/,
   /^AGENTS\.md$/, /^Dockerfile/, /^docker-compose/, /^\.npmrc$/,
