@@ -1,0 +1,55 @@
+name: Milestone Autopilot
+
+on:
+  workflow_dispatch:
+    inputs:
+      milestone:
+        description: "Numeric GitHub milestone ID"
+        required: true
+        type: number
+
+# Only manually dispatched runs. Continuations use an authenticated workflow_dispatch.
+concurrency:
+  group: milestone-autopilot-${{ inputs.milestone }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.24.0
+          run_install: false
+
+      - name: Install dependencies
+        run: |
+          pnpm install --frozen-lockfile
+          npm install --global 'opencode-ai@^1'
+
+      - name: Test scheduling and quality gates
+        run: pnpm exec vitest run scripts/autopilot-core.test.mjs
+
+      - name: Process one issue and queue next iteration
+        env:
+          AUTOPILOT_GH_TOKEN: ${{ secrets.AUTOPILOT_GH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AUTOPILOT_MODEL: ${{ vars.AUTOPILOT_MODEL }}
+          AUTOPILOT_REVIEW_MODEL: ${{ vars.AUTOPILOT_REVIEW_MODEL }}
+        run: node scripts/autopilot.mjs "${{ inputs.milestone }}"
