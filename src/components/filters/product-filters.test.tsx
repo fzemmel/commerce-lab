@@ -43,6 +43,7 @@ describe("ProductFilters", () => {
     const user = userEvent.setup();
     renderFilters({ q: "shirt", brands: [], categories: [], sort: "price-desc", page: 3 });
 
+    await user.click(screen.getByRole("button", { name: "Brand" }));
     await user.click(screen.getByRole("checkbox", { name: "Northline" }));
 
     expect(replace).toHaveBeenCalledWith("/products?ref=campaign&q=shirt&brand=Northline&sort=price-desc", { scroll: false });
@@ -53,6 +54,7 @@ describe("ProductFilters", () => {
     currentSearchParams = "brand=Northline,Motion+Lab&q=shirt&sort=price-desc&page=3&ref=campaign";
     renderFilters({ q: "shirt", brands: ["Northline", "Motion Lab"], categories: [], sort: "price-desc", page: 3 });
 
+    await user.click(screen.getByRole("button", { name: "Brand (2)" }));
     expect((screen.getByRole("checkbox", { name: "Northline" }) as HTMLInputElement).checked).toBe(true);
     await user.click(screen.getByRole("checkbox", { name: "Northline" }));
 
@@ -64,9 +66,65 @@ describe("ProductFilters", () => {
     currentSearchParams = "brand=Northline&category=apparel,footwear&q=shirt&sort=price-desc&page=3&ref=campaign";
     renderFilters({ q: "shirt", brands: ["Northline"], categories: ["apparel", "footwear"], sort: "price-desc", page: 3 });
 
-    await user.click(within(screen.getByRole("group", { name: "Category" })).getByRole("button", { name: "Clear" }));
+    await user.click(screen.getByRole("button", { name: "Category (2)" }));
+    await user.click(within(screen.getByRole("group", { name: "Category" })).getByRole("button", { name: "Clear selected Category" }));
 
     expect(replace).toHaveBeenCalledWith("/products?ref=campaign&q=shirt&brand=Northline&sort=price-desc", { scroll: false });
+  });
+
+  it("filters options, resets the option search, and shows an empty state", async () => {
+    const user = userEvent.setup();
+    renderFilters({ q: "shirt", brands: [], categories: [], sort: "price-desc", page: 3 });
+
+    await user.click(screen.getByRole("button", { name: "Brand" }));
+    const search = screen.getByLabelText("Search Brand options");
+    await user.type(search, "motion");
+
+    expect(screen.getByRole("checkbox", { name: "Motion Lab" })).toBeDefined();
+    expect(screen.queryByRole("checkbox", { name: "Northline" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Clear Brand search" }));
+    expect((search as HTMLInputElement).value).toBe("");
+    expect(screen.getByRole("checkbox", { name: "Northline" })).toBeDefined();
+
+    await user.type(search, "unknown");
+    expect(screen.getByText("No matching options.")).toBeDefined();
+  });
+
+  it("keeps the facet open while selecting and deselecting values", async () => {
+    const user = userEvent.setup();
+    renderFilters({ q: "shirt", brands: ["Northline"], categories: [], sort: "price-desc", page: 3 });
+
+    const trigger = screen.getByRole("button", { name: "Brand (1)" });
+    await user.click(trigger);
+    await user.click(screen.getByRole("checkbox", { name: "Northline" }));
+    await user.click(screen.getByRole("checkbox", { name: "Motion Lab" }));
+
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("checkbox", { name: "Northline" })).toBeDefined();
+    expect(replace).toHaveBeenNthCalledWith(1, "/products?ref=campaign&q=shirt&sort=price-desc", { scroll: false });
+    expect(replace).toHaveBeenNthCalledWith(2, "/products?ref=campaign&q=shirt&brand=Northline%2CMotion+Lab&sort=price-desc", { scroll: false });
+  });
+
+  it("opens from its trigger, focuses search, supports checkbox keyboard interaction, and restores focus on Escape", async () => {
+    const user = userEvent.setup();
+    renderFilters({ q: "shirt", brands: [], categories: [], sort: "price-desc", page: 3 });
+
+    const trigger = screen.getByRole("button", { name: "Brand" });
+    trigger.focus();
+    await user.keyboard("{Enter}");
+
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(screen.getByLabelText("Search Brand options"));
+
+    const checkbox = screen.getByRole("checkbox", { name: "Northline" });
+    checkbox.focus();
+    await user.keyboard("[Space]");
+    expect(replace).toHaveBeenCalledWith("/products?ref=campaign&q=shirt&brand=Northline&sort=price-desc", { scroll: false });
+
+    await user.keyboard("{Escape}");
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(trigger);
   });
 
   it("synchronizes the search input when URL-derived query props change", () => {
