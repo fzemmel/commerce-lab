@@ -9,6 +9,8 @@ This changelog includes the private pre-release development history of the proje
 ### Changed
 
 - Switched milestone planning and implementation from an Anthropic API key to ChatGPT/Codex OAuth on a dedicated self-hosted runner.
+- Switched milestone pull request reviews from the Mistral API to the runner's ChatGPT/Codex OAuth session.
+- Restricted OAuth-backed reviews to internal autopilot pull requests and pre-provisioned OpenCode on the dedicated runner.
 - Added an OpenCode OAuth preflight and documented the persistent runner setup and isolation requirements.
 - Relaxed milestone guardrails so dependency, architecture and application configuration changes can be tested on disposable integration branches while workflow, credential and deployment infrastructure remains protected.
 - Replaced the three-pass plan approval loop with one blocker-focused revision opportunity and non-blocking implementation notes.

@@ -10,8 +10,8 @@ This is an **opt-in** GitHub Actions workflow for delivering a GitHub milestone 
 4. It selects one unblocked issue. Closed issues and issues already merged through an autopilot PR are considered completed; blocked issues are not.
 5. OpenCode v1 uses the runner's persistent ChatGPT/Codex OAuth session to create a plan and review it independently. A hard blocker gets one plan revision and a second review; non-blocking notes are passed directly to implementation.
 6. The controller logs plans and reviews, implements on `autopilot/issue-<issue>-milestone-<milestone>`, rejects changes to protected infrastructure, validates the result, commits and pushes, and creates a draft PR against the milestone branch.
-7. Mistral evaluates that PR against the source issue, `AGENTS.md`, `DESIGN.md`, code and tests. The review includes a machine verdict and the **exact PR head SHA**.
-8. The controller waits for that SHA's Mistral review and GitHub's **Quality checks** check. It corrects failures up to three times, verifying each new revision. Missing, malformed or stale approvals fail closed.
+7. OpenCode uses the runner's ChatGPT/Codex OAuth session to evaluate that PR against the source issue, `AGENTS.md`, `DESIGN.md`, code and tests. The review includes a machine verdict and the **exact PR head SHA**.
+8. The controller waits for that SHA's OpenAI review and GitHub's **Quality checks** check. It corrects failures up to three times, verifying each new revision. Missing, malformed or stale approvals fail closed.
 9. A passing PR is merged **only into the milestone branch**. The workflow dispatches the next run; GitHub PR state makes re-runs resume safely.
 10. After every issue is integrated, a **draft release PR** targeting `main` is created for whole-milestone human review and CI. Its merge to `main` triggers production deployment, so it is never automated.
 
@@ -26,18 +26,19 @@ This automation is not operational until these requirements are fulfilled:
 - Install OpenCode v1 and authenticate as the same operating-system user that runs the GitHub Actions runner:
 
   ```bash
-  npm install --global 'opencode-ai@^1'
+  npm install --global 'opencode-ai@1.19.0'
+  opencode --version
   opencode auth login
   opencode auth list
   ```
 
-  Select OpenAI and complete the interactive ChatGPT/Codex login. `opencode auth list` must show `OpenAI oauth` before the workflow starts. On OpenCode v1 the credential is normally stored in `~/.local/share/opencode/auth.json`; never commit or copy that file into the repository.
+  Select OpenAI and complete the interactive ChatGPT/Codex login. The runner requires exactly OpenCode `1.19.0`, and `opencode auth list` must show `OpenAI oauth` before the workflow starts. On OpenCode v1 the credential is normally stored in `~/.local/share/opencode/auth.json`; never commit or copy that file into the repository. Workflows never install or upgrade OpenCode at runtime.
 - The workflow uses `openai/gpt-5.6-terra` by default. `AUTOPILOT_MODEL` and `AUTOPILOT_REVIEW_MODEL` may override the model through repository Actions variables, but both models must be available to the runner's OpenAI OAuth account.
-- Keep `MISTRAL_API_KEY` configured for the independent review workflow.
+- No OpenAI API key is required. The review workflow runs on the dedicated self-hosted runner and uses the same persistent OpenCode ChatGPT/Codex OAuth login.
 - Configure the Actions secret `AUTOPILOT_GH_TOKEN` to a short-lived installation token or fine-grained PAT restricted to this repository, with **Contents read/write, Pull requests read/write, Issues read, Actions read/write**. Use a dedicated GitHub App where possible. A normal `GITHUB_TOKEN` is intentionally insufficient here: bot-created PRs must trigger other GitHub Actions workflows.
 - Ensure Actions may create and merge PRs to `milestone/*`. Repository rulesets may block auto-merge; this is an expected safety stop. **Do not bypass protections** to make it work.
 - Avoid submitting untrusted or security-sensitive issues for autonomous implementation. The coding agent necessarily has access to its OpenCode OAuth session, and generated code runs on the same machine. Use a dedicated runner account and host with no production credentials, deployment access, personal files or unrelated workloads.
-- Keep the self-hosted runner private to this repository. Do not attach it to public forks or workflows that execute untrusted pull request code.
+- Keep the self-hosted runner private to this repository. Do not attach it to public forks or workflows that execute untrusted pull request code. The OAuth-backed review runs only for same-repository `autopilot/issue-*` pull requests; there is no comment-triggered review path.
 
 Run **Actions → Milestone Autopilot → Run workflow** with the numerical milestone ID. Or use:
 
@@ -50,13 +51,13 @@ Monitor Actions runs, integration PRs, and the final release PR. The workflow ha
 ## Safeguards
 
 - Never automatically targets `main`; deployment remains behind an explicit human merge.
-- Only GitHub's `Quality checks` check and a valid independent Mistral verdict for the exact current PR head SHA can authorize an integration merge.
+- Only GitHub's `Quality checks` check and a valid independent OpenAI verdict for the exact current PR head SHA can authorize an integration merge.
 - Each integration branch must also pass its own CI after the prior issue's merge.
 - Protected infrastructure such as `.github/**`, `.opencode/**`, `scripts/autopilot*`, `AGENTS.md`, credentials and deployment configuration cannot be autonomously merged.
 - Normal project changes may include package dependencies, lockfiles, `DESIGN.md` and application configuration. Validation and lifecycle scripts in `package.json` remain immutable. Dependency metadata or `next.config.*` changes trigger `pnpm install --frozen-lockfile` followed by `pnpm verify`; other changes run `pnpm check` before the PR is created.
 - Planning reviews return `APPROVE`, `IMPLEMENT_WITH_NOTES` or `BLOCKED`. Only contradictory or impossible requirements, protected-infrastructure changes, material security/data-loss risks, or unverifiable acceptance criteria may block planning.
 - Plans and review feedback are included in grouped Actions logs with workflow-command parsing disabled for their untrusted content.
-- Excessive/truncated diffs cannot receive autonomous Mistral approval.
+- Excessive/truncated diffs cannot receive autonomous OpenAI approval.
 - Reviewer comments are accepted only from `github-actions[bot]`. A malformed verdict, failed CI, unsafe files or exhausted fix attempts block the PR and require manual intervention.
 - No silent fallback when GitHub's dependency API is unavailable.
 - A failed run **does not schedule another run**. Correct the problem and manually dispatch again.

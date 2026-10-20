@@ -39,7 +39,7 @@ test("does not treat an unmerged closed PR as successful", () => {
 
 test("recognizes only bot reviews for current head", () => {
   const sha = "a".repeat(40);
-  const body = "<!-- mistral-review sha=" + sha + " -->\nVERDICT: APPROVE";
+  const body = "<!-- openai-review sha=" + sha + " -->\nVERDICT: APPROVE";
   assert.equal(reviewForSha([{ user: { login: "github-actions[bot]" }, body }], sha).verdict, "APPROVE");
   assert.equal(reviewForSha([{ user: { login: "attacker" }, body }], sha), null);
   assert.equal(reviewForSha([{ user: { login: "github-actions[bot]" }, body }], "b".repeat(40)), null);
