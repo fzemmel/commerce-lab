@@ -20,6 +20,13 @@ const meta = {
       { value: "Northline", label: "Northline" },
       { value: "Motion Lab", label: "Motion Lab" },
       { value: "Carry Studio", label: "Carry Studio" },
+      { value: "Aperture Goods", label: "Aperture Goods" },
+      { value: "Field Supply", label: "Field Supply" },
+      { value: "Luma Works", label: "Luma Works" },
+      { value: "Morrow Co.", label: "Morrow Co." },
+      { value: "Pace Standard", label: "Pace Standard" },
+      { value: "Pioneer Outfitters", label: "Pioneer Outfitters" },
+      { value: "Signal Workshop", label: "Signal Workshop" },
     ],
     categoryOptions: [
       { value: "apparel", label: "Apparel" },
@@ -34,7 +41,7 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-export const NoSelection: Story = {};
+export const Default: Story = {};
 
 export const SingleSelection: Story = {
   args: {
@@ -51,6 +58,33 @@ export const MultipleSelections: Story = {
       sort: "price-asc",
       page: 1,
     },
+  },
+};
+
+export const FilteredOptions: Story = {
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Brand" }));
+    await userEvent.type(canvas.getByLabelText("Search Brand options"), "motion");
+
+    await expect(canvas.getByRole("checkbox", { name: "Motion Lab" })).toBeVisible();
+  },
+};
+
+export const NoMatchingOptions: Story = {
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Brand" }));
+    await userEvent.type(canvas.getByLabelText("Search Brand options"), "unknown");
+
+    await expect(canvas.getByText("No matching options.")).toBeVisible();
+  },
+};
+
+export const MobileOpen: Story = {
+  decorators: [(Story) => <div className="max-w-xs"><Story /></div>],
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Brand" }));
+
+    await expect(canvas.getByLabelText("Search Brand options")).toHaveFocus();
   },
 };
 
