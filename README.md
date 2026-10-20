@@ -158,7 +158,7 @@ The deployment workflow uses repository secrets and variables for credentials, t
 
 ## Autonomous Milestone Delivery
 
-An opt-in OpenCode + Mistral milestone autopilot can implement GitHub issues serially, review and test each PR, and integrate successful changes into a dedicated milestone branch. A final draft release PR remains subject to human review before `main` and production deployment are changed.
+An opt-in OpenCode milestone autopilot can implement GitHub issues serially, review and test each PR, and integrate successful changes into a dedicated milestone branch. A final draft release PR remains subject to human review before `main` and production deployment are changed.
 
 See [Autonomous Milestone Delivery](docs/AUTOPILOT.md) for credentials, startup, limits, and safety precautions.
 

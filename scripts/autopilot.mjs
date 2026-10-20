@@ -81,7 +81,7 @@ function humanRequired(prNumber, reason) {
 }
 function invokeOpenCode(agent, prompt, selectedModel = model) {
   const env = { ...process.env };
-  for (const key of ["GH_TOKEN", "GITHUB_TOKEN", "AUTOPILOT_GH_TOKEN", "MISTRAL_API_KEY", "DEPLOY_SSH_PRIVATE_KEY"]) {
+  for (const key of ["GH_TOKEN", "GITHUB_TOKEN", "AUTOPILOT_GH_TOKEN", "DEPLOY_SSH_PRIVATE_KEY"]) {
     delete env[key];
   }
   const output = run("opencode", ["run", "--agent", agent, "--model", selectedModel, prompt], {
@@ -234,7 +234,7 @@ function buildIssue(issue) {
   push("HEAD:refs/heads/" + issueBranch(issue.number));
   const prBody = "Autonomous implementation of #" + issue.number +
     " into " + target + ".\n\nSource issue: #" + issue.number +
-    "\n\nRequires: current-HEAD Mistral approval, CI Quality checks, protected-path policy.\n\n" +
+    "\n\nRequires: current-HEAD OpenAI approval, CI Quality checks, protected-path policy.\n\n" +
     "No deployment or merge into main is permitted by this controller.\n\n" +
     "<!-- autopilot-base-sha=" + git("rev-parse", "refs/remotes/origin/" + target) + " -->";
   gh("pr", "create", "--base", target, "--head", issueBranch(issue.number),
@@ -293,7 +293,7 @@ async function completePR(pr) {
       return;
     }
     if (iteration === fixes) humanRequired(pr.number, "Review/CI failed after " + fixes + " fixes: " + gate.verdict + "/" + gate.quality);
-    if (gate.verdict === "INVALID") humanRequired(pr.number, "Invalid structured Mistral verdict");
+    if (gate.verdict === "INVALID") humanRequired(pr.number, "Invalid structured OpenAI verdict");
     git("fetch", "origin", issueBranchFromPR(pr));
     git("checkout", "-B", issueBranchFromPR(pr), "origin/" + issueBranchFromPR(pr));
     const correction = invokeOpenCode("build",

@@ -39,12 +39,14 @@ jobs:
           run_install: false
 
       - name: Install dependencies
-        run: |
-          pnpm install --frozen-lockfile
-          npm install --global 'opencode-ai@^1'
+        run: pnpm install --frozen-lockfile
 
       - name: Verify OpenCode Codex OAuth
         run: |
+          if ! opencode --version | grep -q '1.19.0'; then
+            echo "OpenCode 1.19.0 must be pre-installed for the runner user."
+            exit 1
+          fi
           if ! opencode auth list | grep -q 'OpenAI.*oauth'; then
             echo "OpenCode has no persistent OpenAI OAuth login. Run 'opencode auth login' as the runner user."
             exit 1
