@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ProductBadges } from "@/components/product/product-badges";
+import { CompareButton } from "@/components/comparison/compare-button";
 import { ProductImage } from "@/components/product/product-image";
 import { ProductPrice } from "@/components/product/product-price";
 import { buttonVariants } from "@/components/ui/button";
@@ -89,9 +90,12 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
             </dl>
           </div>
 
-          <Link href="/products" className={buttonVariants({ variant: "primary", size: "lg", className: "mt-8" })}>
-            Back to listing
-          </Link>
+          <div className="mt-8 flex flex-wrap items-start gap-3">
+            <Link href="/products" className={buttonVariants({ variant: "primary", size: "lg" })}>
+              Back to listing
+            </Link>
+            <CompareButton productId={product.id} />
+          </div>
         </div>
       </section>
     </main>

@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
 import { ProductGrid } from "@/components/product/product-grid";
+import { ComparisonProvider } from "@/components/comparison/comparison-provider";
 import { storyProducts } from "@/test/fixtures/products";
 
 const meta = {
@@ -9,6 +10,9 @@ const meta = {
   parameters: {
     layout: "padded",
   },
+  decorators: [
+    (Story) => <ComparisonProvider restoreFromSessionStorage={false}><Story /></ComparisonProvider>,
+  ],
   args: {
     products: storyProducts,
   },
