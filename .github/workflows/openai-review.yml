@@ -2,21 +2,20 @@ name: OpenAI Code Review
 on:
   pull_request:
     types: [opened, synchronize]
-  issue_comment:
-    types: [created]
 
 # Cancel outdated runs when a pull request receives multiple events in quick succession.
 concurrency:
-  group: openai-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  group: openai-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   openai-review:
-    if: github.event_name == 'pull_request' || contains(github.event.comment.body, '@openai-review')
+    if: >
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'autopilot/issue-')
     runs-on: [self-hosted, commerce-lab-autopilot]
     permissions:
       pull-requests: write
-      issues: write
       contents: read
 
     steps:
@@ -24,16 +23,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install OpenCode
-        run: npm install --global 'opencode-ai@^1'
-
       - name: Verify OpenCode Codex OAuth
         run: |
+          if ! opencode --version | grep -q '1.19.0'; then
+            echo "OpenCode 1.19.0 must be pre-installed for the runner user."
+            exit 1
+          fi
           if ! opencode auth list | grep -q 'OpenAI.*oauth'; then
             echo "OpenCode has no persistent OpenAI OAuth login. Run 'opencode auth login' as the runner user."
             exit 1
@@ -43,16 +38,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_REVIEW_MODEL: ${{ vars.AUTOPILOT_REVIEW_MODEL || vars.AUTOPILOT_MODEL || 'openai/gpt-5.6-terra' }}
-          PR_TITLE: ${{ github.event.pull_request.title || github.event.issue.title }}
-          PR_BODY: ${{ github.event.pull_request.body || github.event.issue.body }}
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          if ! gh pr view "$PR_NUMBER" > /dev/null 2>&1; then
-            echo "Comment #$PR_NUMBER does not belong to a pull request - replying and skipping."
-            gh issue comment "$PR_NUMBER" --body "@openai-review only works on pull requests, not on plain issues."
-            exit 0
-          fi
-
           PR_HEAD_SHA=$(gh pr view "$PR_NUMBER" --json headRefOid --jq '.headRefOid')
           if [ -z "$PR_HEAD_SHA" ]; then
             echo "::error::Missing PR head SHA"

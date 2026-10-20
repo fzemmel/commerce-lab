@@ -26,18 +26,19 @@ This automation is not operational until these requirements are fulfilled:
 - Install OpenCode v1 and authenticate as the same operating-system user that runs the GitHub Actions runner:
 
   ```bash
-  npm install --global 'opencode-ai@^1'
+  npm install --global 'opencode-ai@1.19.0'
+  opencode --version
   opencode auth login
   opencode auth list
   ```
 
-  Select OpenAI and complete the interactive ChatGPT/Codex login. `opencode auth list` must show `OpenAI oauth` before the workflow starts. On OpenCode v1 the credential is normally stored in `~/.local/share/opencode/auth.json`; never commit or copy that file into the repository.
+  Select OpenAI and complete the interactive ChatGPT/Codex login. The runner requires exactly OpenCode `1.19.0`, and `opencode auth list` must show `OpenAI oauth` before the workflow starts. On OpenCode v1 the credential is normally stored in `~/.local/share/opencode/auth.json`; never commit or copy that file into the repository. Workflows never install or upgrade OpenCode at runtime.
 - The workflow uses `openai/gpt-5.6-terra` by default. `AUTOPILOT_MODEL` and `AUTOPILOT_REVIEW_MODEL` may override the model through repository Actions variables, but both models must be available to the runner's OpenAI OAuth account.
 - No OpenAI API key is required. The review workflow runs on the dedicated self-hosted runner and uses the same persistent OpenCode ChatGPT/Codex OAuth login.
 - Configure the Actions secret `AUTOPILOT_GH_TOKEN` to a short-lived installation token or fine-grained PAT restricted to this repository, with **Contents read/write, Pull requests read/write, Issues read, Actions read/write**. Use a dedicated GitHub App where possible. A normal `GITHUB_TOKEN` is intentionally insufficient here: bot-created PRs must trigger other GitHub Actions workflows.
 - Ensure Actions may create and merge PRs to `milestone/*`. Repository rulesets may block auto-merge; this is an expected safety stop. **Do not bypass protections** to make it work.
 - Avoid submitting untrusted or security-sensitive issues for autonomous implementation. The coding agent necessarily has access to its OpenCode OAuth session, and generated code runs on the same machine. Use a dedicated runner account and host with no production credentials, deployment access, personal files or unrelated workloads.
-- Keep the self-hosted runner private to this repository. Do not attach it to public forks or workflows that execute untrusted pull request code.
+- Keep the self-hosted runner private to this repository. Do not attach it to public forks or workflows that execute untrusted pull request code. The OAuth-backed review runs only for same-repository `autopilot/issue-*` pull requests; there is no comment-triggered review path.
 
 Run **Actions → Milestone Autopilot → Run workflow** with the numerical milestone ID. Or use:
 
