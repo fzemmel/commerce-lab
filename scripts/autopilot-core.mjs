@@ -40,7 +40,7 @@ export function selectNext(issues, prsByIssue, dependenciesByIssue) {
 export function reviewForSha(comments, sha) {
   const matches = (comments || []).filter((comment) =>
     comment.user?.login === "github-actions[bot]" &&
-    comment.body?.includes("<!-- mistral-review sha=" + sha + " -->")
+    comment.body?.includes("<!-- openai-review sha=" + sha + " -->")
   );
   if (!matches.length) return null;
   const body = matches[matches.length - 1].body;
