@@ -1,12 +1,15 @@
+const port = process.env.LHCI_PORT || "3100";
+const origin = `http://127.0.0.1:${port}`;
+
 module.exports = {
   ci: {
     collect: {
-      startServerCommand: "pnpm start",
+      startServerCommand: `HOSTNAME=127.0.0.1 PORT=${port} pnpm start`,
       startServerReadyPattern: "Ready",
       url: [
-        "http://localhost:3000/",
-        "http://localhost:3000/products",
-        "http://localhost:3000/products?q=mascara&category=beauty&sort=price-asc",
+        `${origin}/`,
+        `${origin}/products`,
+        `${origin}/products?q=mascara&category=beauty&sort=price-asc`,
       ],
       numberOfRuns: 1,
       settings: {
