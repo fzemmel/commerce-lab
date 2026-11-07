@@ -89,7 +89,7 @@ jobs:
               (.conditions.ref_name.include | index("~DEFAULT_BRANCH") != null) and
               any(.rules[];
                 .type == "required_status_checks" and
-                .parameters.strict_required_status_checks == true and
+                .parameters.strict_required_status_checks_policy == true and
                 any(.parameters.required_status_checks[]?; .context == "Quality checks")
               )
             ' <<< "$ruleset" >/dev/null; then
