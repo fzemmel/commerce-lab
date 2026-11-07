@@ -1,0 +1,106 @@
+name: Dependabot auto-merge
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+# This workflow never checks out or runs code from the pull request.
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Auto-merge eligible Dependabot patches
+    if: >-
+      github.repository == 'fzemmel/commerce-lab' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.base.ref == 'main' &&
+      !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Read verified Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3
+        with:
+          github-token: ${{ github.token }}
+
+      # Pilot: npm devDependency patches only, optionally in the "tooling" group.
+      # Production dependencies, framework groups, Actions, Docker and all major/minor
+      # updates remain subject to manual review.
+      - name: Apply pilot policy
+        id: policy
+        env:
+          ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
+          DEPENDENCY_TYPE: ${{ steps.metadata.outputs.dependency-type }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          DEPENDENCY_GROUP: ${{ steps.metadata.outputs.dependency-group }}
+          MAINTAINER_CHANGES: ${{ steps.metadata.outputs.maintainer-changes }}
+        shell: bash
+        run: |
+          if [[ "$ECOSYSTEM" == "npm" &&
+                "$DEPENDENCY_TYPE" == "direct:development" &&
+                "$UPDATE_TYPE" == "version-update:semver-patch" &&
+                ( -z "$DEPENDENCY_GROUP" || "$DEPENDENCY_GROUP" == "tooling" ) &&
+                "$MAINTAINER_CHANGES" != "true" ]]; then
+            echo 'eligible=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'Skipping: update is outside the conservative auto-merge policy.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Only allow package manifest and lockfile changes
+        if: steps.policy.outputs.eligible == 'true'
+        id: changed-files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          mapfile -t changed < <(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" --jq '.[].filename')
+          if (( ${#changed[@]} == 0 )); then
+            echo 'Skipping: PR has no changed files.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          for path in "${changed[@]}"; do
+            case "$path" in
+              package.json|pnpm-lock.yaml) ;;
+              *)
+                echo "Skipping: unexpected file in Dependabot PR: $path" >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+                ;;
+            esac
+          done
+          echo 'allowed=true' >> "$GITHUB_OUTPUT"
+
+      # GitHub may merge immediately when no status checks are required. Therefore
+      # fail closed unless the existing main ruleset actively enforces the CI check.
+      - name: Require enforced main branch CI protection
+        if: steps.changed-files.outputs.allowed == 'true'
+        id: protection
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          ruleset="$(gh api "repos/$GITHUB_REPOSITORY/rulesets/18763587")"
+          if jq -e '
+              .enforcement == "active" and
+              ([.bypass_actors[]?] | length == 0) and
+              (.conditions.ref_name.include | index("~DEFAULT_BRANCH") != null) and
+              any(.rules[];
+                .type == "required_status_checks" and
+                .parameters.strict_required_status_checks == true and
+                any(.parameters.required_status_checks[]?; .context == "Quality checks")
+              )
+            ' <<< "$ruleset" >/dev/null; then
+            echo 'safe_to_queue=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'Skipping: main ruleset must be active and require up-to-date Quality checks.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Enable squash auto-merge after required CI passes
+        if: steps.protection.outputs.safe_to_queue == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --squash "$PR_URL"
