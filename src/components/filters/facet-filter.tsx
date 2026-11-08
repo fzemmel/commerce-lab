@@ -1,6 +1,16 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type FocusEvent,
+  type KeyboardEvent,
+  type SetStateAction,
+} from "react";
 
 import { cn } from "@/lib/cn";
 
@@ -21,6 +31,9 @@ type FacetFilterProps = {
 const VIEWPORT_MARGIN_PX = 16;
 const PANEL_GAP_PX = 8;
 const MAX_PANEL_HEIGHT_PX = 384;
+
+// Layout effects avoid a frame with a stale panel height, but they are not available during SSR.
+const useBrowserLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 type PanelPlacement = {
   openUp: boolean;
@@ -43,6 +56,17 @@ function measurePanelPlacement(trigger: HTMLElement): PanelPlacement {
   };
 }
 
+function updatePanelPlacement(
+  setPlacement: Dispatch<SetStateAction<PanelPlacement | null>>,
+  trigger: HTMLElement,
+) {
+  const next = measurePanelPlacement(trigger);
+
+  setPlacement((current) =>
+    current && current.openUp === next.openUp && current.maxHeight === next.maxHeight ? current : next,
+  );
+}
+
 function pluralize(label: string) {
   const lowerLabel = label.toLowerCase();
 
@@ -56,6 +80,7 @@ export function FacetFilter({ label, name, options, selectedValues, onChange, on
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const lastFocusedOptionRef = useRef<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [panelPlacement, setPanelPlacement] = useState<PanelPlacement | null>(null);
@@ -109,7 +134,7 @@ export function FacetFilter({ label, name, options, selectedValues, onChange, on
       const trigger = triggerRef.current;
 
       if (trigger) {
-        setPanelPlacement(measurePanelPlacement(trigger));
+        updatePanelPlacement(setPanelPlacement, trigger);
       }
     }
 
@@ -128,18 +153,56 @@ export function FacetFilter({ label, name, options, selectedValues, onChange, on
     };
   }, [isOpen]);
 
+  // The Clear action renders above the trigger when the first option is selected and
+  // disappears again when the last one is cleared. Remeasure after that layout shift so
+  // the panel never keeps a height that no longer fits the viewport.
+  useBrowserLayoutEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const trigger = triggerRef.current;
+
+    if (trigger) {
+      updatePanelPlacement(setPanelPlacement, trigger);
+    }
+  }, [isOpen, selectedValues.length]);
+
+  // Filtering options can unmount the focused checkbox. Move focus to the search input
+  // instead of letting it fall back to the document body.
+  useBrowserLayoutEffect(() => {
+    const focusedOption = lastFocusedOptionRef.current;
+
+    if (!isOpen || !focusedOption) {
+      return;
+    }
+
+    const stillVisible = options.some(
+      (option) =>
+        option.value === focusedOption &&
+        (!normalizedSearch || option.label.toLowerCase().includes(normalizedSearch)),
+    );
+
+    if (!stillVisible) {
+      lastFocusedOptionRef.current = null;
+      searchInputRef.current?.focus();
+    }
+  }, [isOpen, normalizedSearch, options]);
+
   function openDropdown() {
     const trigger = triggerRef.current;
 
     if (trigger) {
-      setPanelPlacement(measurePanelPlacement(trigger));
+      updatePanelPlacement(setPanelPlacement, trigger);
     }
 
+    lastFocusedOptionRef.current = null;
     setSearch("");
     setIsOpen(true);
   }
 
   function closeDropdown(returnFocus = false) {
+    lastFocusedOptionRef.current = null;
     setIsOpen(false);
     setSearch("");
 
@@ -255,7 +318,7 @@ export function FacetFilter({ label, name, options, selectedValues, onChange, on
                   </button>
                 </div>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
+              <div data-facet-options="" className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
                 {filteredOptions.length > 0 ? (
                   <div className="space-y-1">
                     {filteredOptions.map((option) => (
@@ -269,6 +332,9 @@ export function FacetFilter({ label, name, options, selectedValues, onChange, on
                           value={option.value}
                           checked={selectedValues.includes(option.value)}
                           onChange={() => onChange(option.value)}
+                          onFocus={() => {
+                            lastFocusedOptionRef.current = option.value;
+                          }}
                           className="size-4 shrink-0 rounded border-slate-300 accent-amber-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500"
                         />
                         <span className="min-w-0 break-words">{option.label}</span>

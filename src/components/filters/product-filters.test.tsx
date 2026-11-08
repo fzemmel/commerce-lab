@@ -212,9 +212,13 @@ describe("ProductFilters", () => {
     await user.click(trigger);
 
     const panel = getPanel(trigger);
-    const padding = panel.firstElementChild as HTMLElement;
+    const optionsList = panel.querySelector<HTMLElement>("[data-facet-options]");
 
-    await user.click(padding);
+    expect(optionsList).not.toBeNull();
+    expect(optionsList?.className).toContain("p-2");
+
+    fireEvent.mouseDown(optionsList as HTMLElement);
+    fireEvent.click(optionsList as HTMLElement);
 
     expect(brand.getByRole("searchbox", { name: "Search brands" })).toBeTruthy();
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
@@ -337,6 +341,41 @@ describe("ProductFilters", () => {
     expect(panel.className).toContain("bottom-full");
   });
 
+  it("remeasures the panel when selecting an option moves the trigger", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(300);
+    const { rerender } = renderFilters({ q: "", brands: [], categories: [], sort: "name-asc", page: 1 });
+    const brand = getFacet("Brand");
+    const trigger = brand.getByRole("button", { name: "Brand" });
+
+    mockTriggerRect(trigger, { top: 120, bottom: 164 });
+    await user.click(trigger);
+
+    let panel = getPanel(trigger);
+    expect(panel.style.maxHeight).toBe(`${300 - 164 - VIEWPORT_MARGIN_PX - PANEL_GAP_PX}px`);
+    expect(panel.className).toContain("top-full");
+
+    // Selecting the first option renders the Clear row above the trigger and moves it down by ~36px.
+    mockTriggerRect(trigger, { top: 156, bottom: 200 });
+    rerender(<ProductFilters query={{ q: "", brands: ["Northline"], categories: [], sort: "name-asc", page: 1 }} {...options} />);
+
+    panel = getPanel(trigger);
+    const measuredAfterSelection = Number.parseFloat(panel.style.maxHeight);
+
+    expect(panel.style.maxHeight).toBe(`${156 - VIEWPORT_MARGIN_PX - PANEL_GAP_PX}px`);
+    expect(panel.className).toContain("bottom-full");
+    expect(panel.className).not.toContain("top-full");
+    expect(156 - PANEL_GAP_PX - measuredAfterSelection).toBeGreaterThanOrEqual(0);
+
+    // Clearing the last selection moves the trigger back up and flips the panel downward again.
+    mockTriggerRect(trigger, { top: 120, bottom: 164 });
+    rerender(<ProductFilters query={{ q: "", brands: [], categories: [], sort: "name-asc", page: 1 }} {...options} />);
+
+    panel = getPanel(trigger);
+    expect(panel.style.maxHeight).toBe(`${300 - 164 - VIEWPORT_MARGIN_PX - PANEL_GAP_PX}px`);
+    expect(panel.className).toContain("top-full");
+  });
+
   it("ignores scroll events from the panel's own option list", async () => {
     const user = userEvent.setup();
     const viewportHeight = vi.spyOn(window, "innerHeight", "get").mockReturnValue(900);
@@ -374,6 +413,55 @@ describe("ProductFilters", () => {
 
     expect(document.activeElement).toBe(category.getByRole("button", { name: "Category" }));
     expect(brand.queryByRole("searchbox", { name: "Search brands" })).toBeNull();
+  });
+
+  it("keeps the dropdown open on blur without a related target, as browsers do when nothing focusable receives focus", async () => {
+    const user = userEvent.setup();
+    renderFilters({ q: "", brands: [], categories: [], sort: "name-asc", page: 1 });
+    const brand = getFacet("Brand");
+
+    await user.click(brand.getByRole("button", { name: "Brand" }));
+
+    const search = brand.getByRole("searchbox", { name: "Search brands" });
+    fireEvent.focusOut(search, { relatedTarget: null });
+
+    expect(brand.getByRole("searchbox", { name: "Search brands" })).toBeTruthy();
+    expect(brand.getByRole("button", { name: "Brand" }).getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("closes the dropdown when focus moves to a control outside of it", async () => {
+    const user = userEvent.setup();
+    renderFilters({ q: "", brands: [], categories: [], sort: "name-asc", page: 1 });
+    const brand = getFacet("Brand");
+    const outsideControl = screen.getByRole("button", { name: "Reset" });
+
+    await user.click(brand.getByRole("button", { name: "Brand" }));
+
+    const search = brand.getByRole("searchbox", { name: "Search brands" });
+    fireEvent.focusOut(search, { relatedTarget: outsideControl });
+
+    expect(brand.queryByRole("searchbox", { name: "Search brands" })).toBeNull();
+    expect(brand.getByRole("button", { name: "Brand" }).getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("returns focus to the search input when filtering removes the focused option", async () => {
+    const user = userEvent.setup();
+    renderFilters({ q: "", brands: [], categories: [], sort: "name-asc", page: 1 });
+    const brand = getFacet("Brand");
+
+    await user.click(brand.getByRole("button", { name: "Brand" }));
+
+    const search = brand.getByRole("searchbox", { name: "Search brands" });
+    const northline = brand.getByRole("checkbox", { name: "Northline" });
+
+    northline.focus();
+    expect(document.activeElement).toBe(northline);
+
+    fireEvent.change(search, { target: { value: "motion" } });
+
+    expect(brand.queryByRole("checkbox", { name: "Northline" })).toBeNull();
+    expect(brand.getByRole("checkbox", { name: "Motion Lab" })).toBeTruthy();
+    expect(document.activeElement).toBe(search);
   });
 
   it("opens with the keyboard, tabs through the search and options, and closes on Escape with focus returned", async () => {
