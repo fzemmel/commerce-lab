@@ -64,19 +64,55 @@ export const Empty: Story = {
 export const NarrowViewport: Story = {
   decorators: [
     (Story) => (
-      <div className="flex min-h-[100dvh] w-80 max-w-full flex-col justify-end overflow-x-hidden bg-slate-100 p-4">
+      <div className="relative h-80 w-[375px] max-w-full overflow-hidden rounded-3xl border border-slate-300 bg-slate-100 p-4">
         <Story />
       </div>
     ),
   ],
   play: async ({ canvas, userEvent }) => {
-    await userEvent.click(canvas.getByRole("button", { name: "Brand" }));
+    const trigger = canvas.getByRole("button", { name: "Brand" });
+    const triggerRect = trigger.getBoundingClientRect();
+    const viewportHeight = Math.ceil(triggerRect.bottom + 32);
+    const visualViewport = Object.assign(new EventTarget(), { height: viewportHeight, offsetTop: 0 });
+    const originalInnerHeight = Object.getOwnPropertyDescriptor(window, "innerHeight");
+    const originalVisualViewport = Object.getOwnPropertyDescriptor(window, "visualViewport");
 
-    const search = canvas.getByRole("searchbox", { name: "Search brands" });
-    const panel = search.closest<HTMLElement>("[id$='-panel']");
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: viewportHeight });
+    Object.defineProperty(window, "visualViewport", { configurable: true, value: visualViewport });
 
-    await expect(search).toBeVisible();
-    await expect(panel?.style.maxHeight).toBeTruthy();
+    try {
+      await userEvent.click(trigger);
+
+      const search = canvas.getByRole("searchbox", { name: "Search brands" });
+      const panel = search.closest<HTMLElement>("[id$='-panel']");
+
+      if (!panel) {
+        throw new Error("Expected the facet panel to be rendered.");
+      }
+
+      const optionsList = panel.querySelector<HTMLElement>(".overflow-y-auto");
+      const maxHeight = Number.parseFloat(panel.style.maxHeight);
+      const availableAbove = triggerRect.top - 16 - 8;
+
+      await expect(panel).toBeVisible();
+      await expect(panel.className).toContain("bottom-full");
+      await expect(maxHeight).toBeGreaterThan(0);
+      await expect(maxHeight).toBeLessThanOrEqual(availableAbove);
+      await expect(maxHeight).toBeLessThanOrEqual(viewportHeight);
+      await expect(optionsList?.className).toContain("overflow-y-auto");
+    } finally {
+      if (originalInnerHeight) {
+        Object.defineProperty(window, "innerHeight", originalInnerHeight);
+      } else {
+        Reflect.deleteProperty(window, "innerHeight");
+      }
+
+      if (originalVisualViewport) {
+        Object.defineProperty(window, "visualViewport", originalVisualViewport);
+      } else {
+        Reflect.deleteProperty(window, "visualViewport");
+      }
+    }
   },
 };
 

@@ -20,7 +20,7 @@ type FacetFilterProps = {
 
 const VIEWPORT_MARGIN_PX = 16;
 const PANEL_GAP_PX = 8;
-const MIN_PANEL_HEIGHT_PX = 160;
+const MAX_PANEL_HEIGHT_PX = 384;
 
 type PanelPlacement = {
   openUp: boolean;
@@ -29,14 +29,17 @@ type PanelPlacement = {
 
 function measurePanelPlacement(trigger: HTMLElement): PanelPlacement {
   const triggerRect = trigger.getBoundingClientRect();
-  const viewportHeight = window.innerHeight;
-  const spaceBelow = viewportHeight - triggerRect.bottom - VIEWPORT_MARGIN_PX - PANEL_GAP_PX;
-  const spaceAbove = triggerRect.top - VIEWPORT_MARGIN_PX - PANEL_GAP_PX;
-  const openUp = spaceBelow < MIN_PANEL_HEIGHT_PX && spaceAbove > spaceBelow;
+  const visualViewport = window.visualViewport;
+  const viewportTop = visualViewport?.offsetTop ?? 0;
+  const viewportBottom = viewportTop + (visualViewport?.height ?? window.innerHeight);
+  const spaceBelow = viewportBottom - triggerRect.bottom - VIEWPORT_MARGIN_PX - PANEL_GAP_PX;
+  const spaceAbove = triggerRect.top - viewportTop - VIEWPORT_MARGIN_PX - PANEL_GAP_PX;
+  const openUp = spaceAbove > spaceBelow;
+  const availableSpace = openUp ? spaceAbove : spaceBelow;
 
   return {
     openUp,
-    maxHeight: Math.max(MIN_PANEL_HEIGHT_PX, openUp ? spaceAbove : spaceBelow),
+    maxHeight: Math.min(MAX_PANEL_HEIGHT_PX, Math.max(0, availableSpace)),
   };
 }
 
@@ -96,7 +99,13 @@ export function FacetFilter({ label, name, options, selectedValues, onChange, on
       return;
     }
 
-    function handleViewportChange() {
+    function handleViewportChange(event: Event) {
+      const target = event.target;
+
+      if (target instanceof Node && containerRef.current?.contains(target)) {
+        return;
+      }
+
       const trigger = triggerRef.current;
 
       if (trigger) {
@@ -104,12 +113,18 @@ export function FacetFilter({ label, name, options, selectedValues, onChange, on
       }
     }
 
+    const visualViewport = window.visualViewport;
+
     window.addEventListener("resize", handleViewportChange);
     window.addEventListener("scroll", handleViewportChange, true);
+    visualViewport?.addEventListener("resize", handleViewportChange);
+    visualViewport?.addEventListener("scroll", handleViewportChange);
 
     return () => {
       window.removeEventListener("resize", handleViewportChange);
       window.removeEventListener("scroll", handleViewportChange, true);
+      visualViewport?.removeEventListener("resize", handleViewportChange);
+      visualViewport?.removeEventListener("scroll", handleViewportChange);
     };
   }, [isOpen]);
 
@@ -152,7 +167,7 @@ export function FacetFilter({ label, name, options, selectedValues, onChange, on
 
     const nextTarget = event.relatedTarget;
 
-    if (nextTarget instanceof Node && containerRef.current?.contains(nextTarget)) {
+    if (!(nextTarget instanceof Node) || containerRef.current?.contains(nextTarget)) {
       return;
     }
 

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -9,6 +9,7 @@ import type { ProductQuery } from "@/lib/product-query";
 
 const VIEWPORT_MARGIN_PX = 16;
 const PANEL_GAP_PX = 8;
+const MAX_PANEL_HEIGHT_PX = 384;
 
 const replace = vi.fn();
 let currentSearchParams = "q=shirt&sort=price-desc&page=3&ref=campaign";
@@ -65,6 +66,7 @@ describe("ProductFilters", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    Reflect.deleteProperty(window, "visualViewport");
   });
 
   it("selects a facet using canonical URL values, preserves parameters, and resets pagination", async () => {
@@ -136,11 +138,16 @@ describe("ProductFilters", () => {
   it("shows the selected-option count next to a closed facet label", () => {
     renderFilters({ q: "", brands: ["Northline", "Motion Lab"], categories: ["apparel"], sort: "name-asc", page: 1 });
     const brandTrigger = getFacet("Brand").getByRole("button", { name: "Brand, 2 selected" });
+    const brandBadge = within(brandTrigger).getByText(/^2/);
+    const categoryTrigger = getFacet("Category").getByRole("button", { name: "Category, 1 selected" });
+    const categoryBadge = within(categoryTrigger).getByText(/^1/);
 
-    expect(brandTrigger).toBeTruthy();
     expect(brandTrigger.getAttribute("aria-describedby")).not.toBeNull();
+    expect(brandBadge.textContent).toContain("2");
+    expect(brandBadge.className).toContain("bg-amber-100");
+    expect(categoryBadge.textContent).toContain("1");
+    expect(categoryBadge.className).toContain("bg-amber-100");
     expect(screen.getByText("Selected brands: Northline, Motion Lab.")).toBeTruthy();
-    expect(getFacet("Category").getByRole("button", { name: "Category, 1 selected" })).toBeTruthy();
   });
 
   it("selects and deselects multiple options without closing the dropdown", async () => {
@@ -184,6 +191,48 @@ describe("ProductFilters", () => {
     expect(brand.queryByRole("searchbox", { name: "Search brands" })).toBeNull();
   });
 
+  it("keeps the dropdown open and toggles the option when clicking the option label text", async () => {
+    const user = userEvent.setup();
+    renderFilters({ q: "shirt", brands: [], categories: [], sort: "price-desc", page: 3 });
+    const brand = getFacet("Brand");
+
+    await user.click(brand.getByRole("button", { name: "Brand" }));
+    await user.click(brand.getByText("Northline"));
+
+    expect(replace).toHaveBeenCalledWith("/products?ref=campaign&q=shirt&brand=Northline&sort=price-desc", { scroll: false });
+    expect(brand.getByRole("searchbox", { name: "Search brands" })).toBeTruthy();
+  });
+
+  it("keeps the dropdown open when clicking panel padding", async () => {
+    const user = userEvent.setup();
+    renderFilters({ q: "", brands: [], categories: [], sort: "name-asc", page: 1 });
+    const brand = getFacet("Brand");
+    const trigger = brand.getByRole("button", { name: "Brand" });
+
+    await user.click(trigger);
+
+    const panel = getPanel(trigger);
+    const padding = panel.firstElementChild as HTMLElement;
+
+    await user.click(padding);
+
+    expect(brand.getByRole("searchbox", { name: "Search brands" })).toBeTruthy();
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("keeps the dropdown open when clicking the empty-state message", async () => {
+    const user = userEvent.setup();
+    renderFilters({ q: "", brands: [], categories: [], sort: "name-asc", page: 1 });
+    const brand = getFacet("Brand");
+
+    await user.click(brand.getByRole("button", { name: "Brand" }));
+    await user.type(brand.getByRole("searchbox", { name: "Search brands" }), "zzz");
+    await user.click(brand.getByRole("status"));
+
+    expect(brand.getByRole("status").textContent).toBe('No brands match "zzz".');
+    expect(brand.getByRole("searchbox", { name: "Search brands" })).toBeTruthy();
+  });
+
   it("constrains the panel to the available viewport space below the trigger and remeasures on viewport changes", async () => {
     const user = userEvent.setup();
     const viewportHeight = vi.spyOn(window, "innerHeight", "get").mockReturnValue(900);
@@ -195,11 +244,14 @@ describe("ProductFilters", () => {
     await user.click(trigger);
 
     const panel = getPanel(trigger);
-    const expectedMaxHeight = 900 - 144 - VIEWPORT_MARGIN_PX - PANEL_GAP_PX;
+    const optionsList = panel.querySelector<HTMLElement>(".overflow-y-auto");
 
-    expect(panel.style.maxHeight).toBe(`${expectedMaxHeight}px`);
+    expect(panel.style.maxHeight).toBe(`${MAX_PANEL_HEIGHT_PX}px`);
+    expect(panel.className).toContain("overflow-hidden");
     expect(panel.className).toContain("top-full");
     expect(panel.className).not.toContain("bottom-full");
+    expect(optionsList).not.toBeNull();
+    expect(optionsList?.className).toContain("overflow-y-auto");
 
     viewportHeight.mockReturnValue(500);
     fireEvent(window, new Event("resize"));
@@ -207,22 +259,103 @@ describe("ProductFilters", () => {
     expect(panel.style.maxHeight).toBe(`${500 - 144 - VIEWPORT_MARGIN_PX - PANEL_GAP_PX}px`);
   });
 
-  it("opens the panel upward when below-space is insufficient and above-space is larger", async () => {
+  it("clamps the panel to a short viewport instead of forcing a minimum height below the trigger", async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, "innerHeight", "get").mockReturnValue(800);
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(320);
     renderFilters({ q: "", brands: [], categories: [], sort: "name-asc", page: 1 });
     const brand = getFacet("Brand");
     const trigger = brand.getByRole("button", { name: "Brand" });
 
-    mockTriggerRect(trigger, { top: 650, bottom: 694 });
+    mockTriggerRect(trigger, { top: 120, bottom: 164 });
     await user.click(trigger);
 
     const panel = getPanel(trigger);
-    const expectedMaxHeight = 650 - VIEWPORT_MARGIN_PX - PANEL_GAP_PX;
+    const availableBelow = 320 - 164 - VIEWPORT_MARGIN_PX - PANEL_GAP_PX;
+    const availableAbove = 120 - VIEWPORT_MARGIN_PX - PANEL_GAP_PX;
+    const maxHeight = Number.parseFloat(panel.style.maxHeight);
 
-    expect(panel.style.maxHeight).toBe(`${expectedMaxHeight}px`);
+    expect(availableBelow).toBeLessThan(160);
+    expect(availableAbove).toBeLessThan(160);
+    expect(maxHeight).toBe(availableBelow);
+    expect(maxHeight).toBeLessThanOrEqual(availableBelow);
+    expect(maxHeight).toBeLessThan(320);
+    expect(164 + PANEL_GAP_PX + maxHeight).toBeLessThanOrEqual(320);
+    expect(panel.className).toContain("top-full");
+  });
+
+  it("opens upward and clamps within a short viewport when above-space is larger", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(240);
+    renderFilters({ q: "", brands: [], categories: [], sort: "name-asc", page: 1 });
+    const brand = getFacet("Brand");
+    const trigger = brand.getByRole("button", { name: "Brand" });
+
+    mockTriggerRect(trigger, { top: 130, bottom: 174 });
+    await user.click(trigger);
+
+    const panel = getPanel(trigger);
+    const availableBelow = 240 - 174 - VIEWPORT_MARGIN_PX - PANEL_GAP_PX;
+    const availableAbove = 130 - VIEWPORT_MARGIN_PX - PANEL_GAP_PX;
+    const maxHeight = Number.parseFloat(panel.style.maxHeight);
+
+    expect(availableBelow).toBeLessThan(160);
+    expect(availableAbove).toBeLessThan(160);
+    expect(maxHeight).toBe(availableAbove);
+    expect(maxHeight).toBeLessThanOrEqual(availableAbove);
+    expect(maxHeight).toBeLessThan(240);
+    expect(130 - PANEL_GAP_PX - maxHeight).toBeGreaterThanOrEqual(0);
     expect(panel.className).toContain("bottom-full");
     expect(panel.className).not.toContain("top-full");
+  });
+
+  it("measures against the visual viewport height and offset when it is available", async () => {
+    const user = userEvent.setup();
+    let visualHeight = 400;
+    const visualViewport = Object.assign(new EventTarget(), { height: 400, offsetTop: 0 });
+
+    Object.defineProperty(visualViewport, "height", { configurable: true, get: () => visualHeight });
+    Object.defineProperty(window, "visualViewport", { configurable: true, value: visualViewport });
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(900);
+    renderFilters({ q: "", brands: [], categories: [], sort: "name-asc", page: 1 });
+    const brand = getFacet("Brand");
+    const trigger = brand.getByRole("button", { name: "Brand" });
+
+    mockTriggerRect(trigger, { top: 100, bottom: 144 });
+    await user.click(trigger);
+
+    const panel = getPanel(trigger);
+
+    expect(panel.style.maxHeight).toBe(`${400 - 144 - VIEWPORT_MARGIN_PX - PANEL_GAP_PX}px`);
+    expect(panel.className).toContain("top-full");
+
+    visualHeight = 200;
+    act(() => {
+      visualViewport.dispatchEvent(new Event("resize"));
+    });
+
+    expect(panel.style.maxHeight).toBe(`${100 - VIEWPORT_MARGIN_PX - PANEL_GAP_PX}px`);
+    expect(panel.className).toContain("bottom-full");
+  });
+
+  it("ignores scroll events from the panel's own option list", async () => {
+    const user = userEvent.setup();
+    const viewportHeight = vi.spyOn(window, "innerHeight", "get").mockReturnValue(900);
+    renderFilters({ q: "", brands: [], categories: [], sort: "name-asc", page: 1 });
+    const brand = getFacet("Brand");
+    const trigger = brand.getByRole("button", { name: "Brand" });
+
+    mockTriggerRect(trigger, { top: 100, bottom: 144 });
+    await user.click(trigger);
+
+    const panel = getPanel(trigger);
+    const optionsList = panel.querySelector<HTMLElement>(".overflow-y-auto");
+
+    expect(panel.style.maxHeight).toBe(`${MAX_PANEL_HEIGHT_PX}px`);
+
+    viewportHeight.mockReturnValue(500);
+    fireEvent.scroll(optionsList as HTMLElement);
+
+    expect(panel.style.maxHeight).toBe(`${MAX_PANEL_HEIGHT_PX}px`);
   });
 
   it("closes the dropdown when focus leaves it with Tab", async () => {
