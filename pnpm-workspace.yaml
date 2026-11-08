@@ -1,6 +1,13 @@
 overrides:
+  # Remove when get-uri adopts the directory-listing CPU exhaustion fix (GHSA-c475-qrg2-pj4r).
+  get-uri@6>basic-ftp: '^6.2.1'
+  # Glob 14 also fixes the vulnerable minimatch dependency; keep Storybook's plugin API unchanged.
+  '@joshwooding/vite-plugin-react-docgen-typescript@0.7.0>glob': '^14.0.2'
+  # Remove when typescript-estree adopts minimatch 11 (GHSA-g3hv-75wg-m249).
+  '@typescript-eslint/typescript-estree@8>minimatch': '^11.0.1'
   js-yaml@<3.15.0: '>=3.15.0'
   postcss@<8.5.10: '>=8.5.10'
+  proxy-addr@>=1.1.0 <2.0.8: '>=2.0.8'
   tmp@<0.2.6: '>=0.2.6'
   tmp@<=0.2.3: '>=0.2.4'
   uuid@<11.1.1: '>=11.1.1'

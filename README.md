@@ -94,6 +94,8 @@ Run the complete CI-equivalent validation pipeline (including production and Sto
 pnpm verify
 ```
 
+Lighthouse starts its own production server on `127.0.0.1:3100` to avoid conflicting with development servers on port 3000. Set `LHCI_PORT` to use another port, for example `LHCI_PORT=3101 pnpm verify`.
+
 Run unit tests:
 
 ```bash
