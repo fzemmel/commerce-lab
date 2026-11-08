@@ -4,9 +4,16 @@ export type ProductSort = "name-asc" | "price-asc" | "price-desc" | "rating-desc
 
 export const PRODUCTS_PER_PAGE = 24;
 
+export type PriceRange = {
+  min?: number;
+  max?: number;
+};
+
 export type ProductQuery = {
   q: string;
-  category: ProductCategory | "all";
+  brands: string[];
+  categories: ProductCategory[];
+  price?: PriceRange;
   sort: ProductSort;
   page: number;
 };
@@ -37,10 +44,48 @@ function firstParam(value: SearchParamValue) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+function parseFacetValues(value: SearchParamValue, validValues?: string[]) {
+  const values = (Array.isArray(value) ? value : [value])
+    .flatMap((entry) => entry?.split(",") ?? [])
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  const uniqueValues = [...new Set(values)];
+
+  return validValues ? uniqueValues.filter((entry) => validValues.includes(entry)) : uniqueValues;
+}
+
+function serializeFacetValues(values: string[]) {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
 function parsePage(value: SearchParamValue) {
   const page = Number.parseInt(firstParam(value) ?? "", 10);
 
   return Number.isFinite(page) && page > 0 ? page : 1;
+}
+
+export function parsePositivePrice(value: SearchParamValue | number) {
+  const price = typeof value === "number" ? value : Number(firstParam(value));
+
+  return Number.isFinite(price) && price > 0 ? price : undefined;
+}
+
+export function parsePriceRange(minValue: SearchParamValue | number, maxValue: SearchParamValue | number): PriceRange | undefined {
+  const min = parsePositivePrice(minValue);
+  const max = parsePositivePrice(maxValue);
+
+  if (min !== undefined && max !== undefined && min > max) {
+    return undefined;
+  }
+
+  if (min === undefined && max === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...(min !== undefined ? { min } : {}),
+    ...(max !== undefined ? { max } : {}),
+  };
 }
 
 export function formatCategoryLabel(category: ProductCategory) {
@@ -51,18 +96,71 @@ export function formatCategoryLabel(category: ProductCategory) {
     .join(" ");
 }
 
-export function parseProductQuery(searchParams: ProductSearchParams, validCategories?: ProductCategory[]): ProductQuery {
+export function parseProductQuery(
+  searchParams: ProductSearchParams,
+  validBrands?: string[],
+  validCategories?: ProductCategory[],
+): ProductQuery {
   const q = firstParam(searchParams.q)?.trim() ?? "";
-  const category = firstParam(searchParams.category);
   const sort = firstParam(searchParams.sort);
-  const hasKnownCategory = category && (!validCategories || validCategories.includes(category));
+  const price = parsePriceRange(searchParams.priceMin, searchParams.priceMax);
 
   return {
     q,
-    category: hasKnownCategory ? category : "all",
+    brands: parseFacetValues(searchParams.brand, validBrands),
+    categories: parseFacetValues(searchParams.category, validCategories),
+    ...(price ? { price } : {}),
     sort: sort && sortValues.includes(sort as ProductSort) ? (sort as ProductSort) : "name-asc",
     page: parsePage(searchParams.page),
   };
+}
+
+export function serializeProductQuery(query: ProductQuery) {
+  const params = new URLSearchParams();
+
+  if (query.q) {
+    params.set("q", query.q);
+  }
+
+  const brands = serializeFacetValues(query.brands);
+  const categories = serializeFacetValues(query.categories);
+
+  if (brands.length > 0) {
+    params.set("brand", brands.join(","));
+  }
+
+  if (categories.length > 0) {
+    params.set("category", categories.join(","));
+  }
+
+  const price = parsePriceRange(query.price?.min, query.price?.max);
+
+  if (price?.min !== undefined) {
+    params.set("priceMin", String(price.min));
+  }
+
+  if (price?.max !== undefined) {
+    params.set("priceMax", String(price.max));
+  }
+
+  if (query.sort !== "name-asc") {
+    params.set("sort", query.sort);
+  }
+
+  if (query.page > 1) {
+    params.set("page", String(query.page));
+  }
+
+  return params;
+}
+
+export function applyProductQueryToSearchParams(searchParams: Pick<URLSearchParams, "toString">, query: ProductQuery) {
+  const params = new URLSearchParams(searchParams.toString());
+
+  ["q", "brand", "category", "priceMin", "priceMax", "sort", "page"].forEach((key) => params.delete(key));
+  serializeProductQuery(query).forEach((value, key) => params.set(key, value));
+
+  return params;
 }
 
 export function getCategoryOptions(catalog: Product[]) {
@@ -71,20 +169,30 @@ export function getCategoryOptions(catalog: Product[]) {
     .map((value) => ({ value, label: formatCategoryLabel(value) }));
 }
 
+export function getBrandOptions(catalog: Product[]) {
+  return [...new Set(catalog.map((product) => product.brand))]
+    .toSorted((a, b) => a.localeCompare(b))
+    .map((value) => ({ value, label: value }));
+}
+
 export function getProductBySlug(slug: string, catalog: Product[]) {
   return catalog.find((product) => product.slug === slug);
 }
 
 export function queryProducts(query: ProductQuery, catalog: Product[]) {
   const search = query.q.toLowerCase();
+  const price = parsePriceRange(query.price?.min, query.price?.max);
 
   return catalog
     .filter((product) => {
-      const matchesCategory = query.category === "all" || product.category === query.category;
+      const matchesBrand = query.brands.length === 0 || query.brands.includes(product.brand);
+      const matchesCategory = query.categories.length === 0 || query.categories.includes(product.category);
       const searchable = `${product.name} ${product.brand} ${product.description}`.toLowerCase();
       const matchesSearch = search.length === 0 || searchable.includes(search);
+      const matchesMinimumPrice = price?.min === undefined || product.price >= price.min;
+      const matchesMaximumPrice = price?.max === undefined || product.price <= price.max;
 
-      return matchesCategory && matchesSearch;
+      return matchesBrand && matchesCategory && matchesSearch && matchesMinimumPrice && matchesMaximumPrice;
     })
     .toSorted((a, b) => {
       switch (query.sort) {

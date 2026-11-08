@@ -1,36 +1,31 @@
 import Link from "next/link";
 
 import { cn } from "@/lib/cn";
-import type { ProductQuery } from "@/lib/product-query";
+import { applyProductQueryToSearchParams, type ProductQuery, type ProductSearchParams } from "@/lib/product-query";
 
 type ProductPaginationProps = {
   query: ProductQuery;
+  searchParams: ProductSearchParams;
   currentPage: number;
   totalPages: number;
 };
 
 type PageItem = number | "ellipsis-start" | "ellipsis-end";
 
-function createProductsHref(query: ProductQuery, page: number) {
+function createProductsHref(query: ProductQuery, searchParams: ProductSearchParams, page: number) {
   const params = new URLSearchParams();
 
-  if (query.q) {
-    params.set("q", query.q);
-  }
+  Object.entries(searchParams).forEach(([key, value]) => {
+    (Array.isArray(value) ? value : [value]).forEach((entry) => {
+      if (entry !== undefined) {
+        params.append(key, entry);
+      }
+    });
+  });
 
-  if (query.category !== "all") {
-    params.set("category", query.category);
-  }
+  const queryParams = applyProductQueryToSearchParams(params, { ...query, page });
 
-  if (query.sort !== "name-asc") {
-    params.set("sort", query.sort);
-  }
-
-  if (page > 1) {
-    params.set("page", String(page));
-  }
-
-  const queryString = params.toString();
+  const queryString = queryParams.toString();
 
   return queryString ? `/products?${queryString}` : "/products";
 }
@@ -60,7 +55,7 @@ function getPageItems(currentPage: number, totalPages: number): PageItem[] {
 const pageLinkClass =
   "inline-flex h-10 min-w-10 items-center justify-center rounded-full border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500";
 
-export function ProductPagination({ query, currentPage, totalPages }: ProductPaginationProps) {
+export function ProductPagination({ query, searchParams, currentPage, totalPages }: ProductPaginationProps) {
   if (totalPages <= 1) {
     return null;
   }
@@ -72,7 +67,7 @@ export function ProductPagination({ query, currentPage, totalPages }: ProductPag
   return (
     <nav className="mt-8 flex flex-wrap items-center justify-center gap-2" aria-label="Product pagination">
       {hasPreviousPage ? (
-        <Link href={createProductsHref(query, currentPage - 1)} className={cn(pageLinkClass, "px-4")}>
+        <Link href={createProductsHref(query, searchParams, currentPage - 1)} className={cn(pageLinkClass, "px-4")}>
           Previous
         </Link>
       ) : (
@@ -93,7 +88,7 @@ export function ProductPagination({ query, currentPage, totalPages }: ProductPag
               {item}
             </span>
           ) : (
-            <Link key={item} href={createProductsHref(query, item)} className={pageLinkClass} aria-label={`Go to page ${item}`}>
+            <Link key={item} href={createProductsHref(query, searchParams, item)} className={pageLinkClass} aria-label={`Go to page ${item}`}>
               {item}
             </Link>
           )
@@ -105,7 +100,7 @@ export function ProductPagination({ query, currentPage, totalPages }: ProductPag
       )}
 
       {hasNextPage ? (
-        <Link href={createProductsHref(query, currentPage + 1)} className={cn(pageLinkClass, "px-4")}>
+          <Link href={createProductsHref(query, searchParams, currentPage + 1)} className={cn(pageLinkClass, "px-4")}>
           Next
         </Link>
       ) : (

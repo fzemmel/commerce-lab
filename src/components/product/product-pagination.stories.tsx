@@ -11,10 +11,12 @@ const meta = {
   args: {
     query: {
       q: "mascara",
-      category: "beauty",
+      brands: ["Glow Lab"],
+      categories: ["beauty"],
       sort: "price-asc",
       page: 3,
     },
+    searchParams: { q: "mascara", brand: "Glow Lab", category: "beauty", sort: "price-asc", page: "3" },
     currentPage: 3,
     totalPages: 9,
   },
