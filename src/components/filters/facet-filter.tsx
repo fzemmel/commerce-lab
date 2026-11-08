@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
 
 import { cn } from "@/lib/cn";
 
@@ -18,6 +18,28 @@ type FacetFilterProps = {
   onClear: () => void;
 };
 
+const VIEWPORT_MARGIN_PX = 16;
+const PANEL_GAP_PX = 8;
+const MIN_PANEL_HEIGHT_PX = 160;
+
+type PanelPlacement = {
+  openUp: boolean;
+  maxHeight: number;
+};
+
+function measurePanelPlacement(trigger: HTMLElement): PanelPlacement {
+  const triggerRect = trigger.getBoundingClientRect();
+  const viewportHeight = window.innerHeight;
+  const spaceBelow = viewportHeight - triggerRect.bottom - VIEWPORT_MARGIN_PX - PANEL_GAP_PX;
+  const spaceAbove = triggerRect.top - VIEWPORT_MARGIN_PX - PANEL_GAP_PX;
+  const openUp = spaceBelow < MIN_PANEL_HEIGHT_PX && spaceAbove > spaceBelow;
+
+  return {
+    openUp,
+    maxHeight: Math.max(MIN_PANEL_HEIGHT_PX, openUp ? spaceAbove : spaceBelow),
+  };
+}
+
 function pluralize(label: string) {
   const lowerLabel = label.toLowerCase();
 
@@ -33,6 +55,7 @@ export function FacetFilter({ label, name, options, selectedValues, onChange, on
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [panelPlacement, setPanelPlacement] = useState<PanelPlacement | null>(null);
 
   const normalizedSearch = search.trim().toLowerCase();
   const filteredOptions = normalizedSearch
@@ -68,7 +91,35 @@ export function FacetFilter({ label, name, options, selectedValues, onChange, on
     return () => document.removeEventListener("mousedown", handleMouseDown);
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    function handleViewportChange() {
+      const trigger = triggerRef.current;
+
+      if (trigger) {
+        setPanelPlacement(measurePanelPlacement(trigger));
+      }
+    }
+
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
+
+    return () => {
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
+    };
+  }, [isOpen]);
+
   function openDropdown() {
+    const trigger = triggerRef.current;
+
+    if (trigger) {
+      setPanelPlacement(measurePanelPlacement(trigger));
+    }
+
     setSearch("");
     setIsOpen(true);
   }
@@ -94,15 +145,30 @@ export function FacetFilter({ label, name, options, selectedValues, onChange, on
     }
   }
 
+  function handleBlur(event: FocusEvent<HTMLDivElement>) {
+    if (!isOpen) {
+      return;
+    }
+
+    const nextTarget = event.relatedTarget;
+
+    if (nextTarget instanceof Node && containerRef.current?.contains(nextTarget)) {
+      return;
+    }
+
+    closeDropdown();
+  }
+
   return (
     <fieldset className="min-w-0">
       <legend className="sr-only">{label}</legend>
-      <div ref={containerRef} onKeyDown={handleKeyDown}>
+      <div ref={containerRef} onKeyDown={handleKeyDown} onBlur={handleBlur}>
         {selectedValues.length > 0 ? (
           <div className="mb-2 flex justify-end">
             <button
               type="button"
               onClick={onClear}
+              aria-label={`Clear selected ${optionPluralLabel}`}
               className="rounded-full px-2 py-1 text-sm font-semibold text-amber-700 transition hover:bg-amber-50 hover:text-amber-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500"
             >
               Clear
@@ -144,7 +210,11 @@ export function FacetFilter({ label, name, options, selectedValues, onChange, on
           {isOpen ? (
             <div
               id={panelId}
-              className="absolute left-0 right-0 z-30 mt-2 flex max-h-[min(24rem,calc(100dvh-4rem))] w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl sm:w-80 sm:max-w-[calc(100vw-2rem)]"
+              style={{ maxHeight: panelPlacement ? `${panelPlacement.maxHeight}px` : undefined }}
+              className={cn(
+                "absolute left-0 right-0 z-30 flex w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl sm:w-80 sm:max-w-[calc(100vw-2rem)]",
+                panelPlacement?.openUp ? "bottom-full mb-2" : "top-full mt-2",
+              )}
             >
               <div className="border-b border-slate-100 p-3">
                 <label htmlFor={searchId} className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-600">
@@ -184,12 +254,6 @@ export function FacetFilter({ label, name, options, selectedValues, onChange, on
                           value={option.value}
                           checked={selectedValues.includes(option.value)}
                           onChange={() => onChange(option.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              onChange(option.value);
-                            }
-                          }}
                           className="size-4 shrink-0 rounded border-slate-300 accent-amber-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500"
                         />
                         <span className="min-w-0 break-words">{option.label}</span>

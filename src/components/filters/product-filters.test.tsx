@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProductFilters } from "@/components/filters/product-filters";
 import type { ProductQuery } from "@/lib/product-query";
+
+const VIEWPORT_MARGIN_PX = 16;
+const PANEL_GAP_PX = 8;
 
 const replace = vi.fn();
 let currentSearchParams = "q=shirt&sort=price-desc&page=3&ref=campaign";
@@ -35,13 +38,34 @@ function getFacet(label: "Brand" | "Category") {
   return within(screen.getByRole("group", { name: label }));
 }
 
+function mockTriggerRect(trigger: Element, { top, bottom }: { top: number; bottom: number }) {
+  vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({
+    x: 0,
+    y: top,
+    width: 320,
+    height: bottom - top,
+    top,
+    right: 320,
+    bottom,
+    left: 0,
+    toJSON: () => ({}),
+  } as DOMRect);
+}
+
+function getPanel(trigger: HTMLElement) {
+  return document.getElementById(trigger.getAttribute("aria-controls") ?? "") as HTMLElement;
+}
+
 describe("ProductFilters", () => {
   beforeEach(() => {
     replace.mockReset();
     currentSearchParams = "q=shirt&sort=price-desc&page=3&ref=campaign";
   });
 
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
 
   it("selects a facet using canonical URL values, preserves parameters, and resets pagination", async () => {
     const user = userEvent.setup();
@@ -73,7 +97,7 @@ describe("ProductFilters", () => {
     currentSearchParams = "brand=Northline&category=apparel,footwear&q=shirt&sort=price-desc&page=3&ref=campaign";
     renderFilters({ q: "shirt", brands: ["Northline"], categories: ["apparel", "footwear"], sort: "price-desc", page: 3 });
 
-    await user.click(getFacet("Category").getByRole("button", { name: "Clear" }));
+    await user.click(getFacet("Category").getByRole("button", { name: "Clear selected categories" }));
 
     expect(replace).toHaveBeenCalledWith("/products?ref=campaign&q=shirt&brand=Northline&sort=price-desc", { scroll: false });
   });
@@ -160,6 +184,65 @@ describe("ProductFilters", () => {
     expect(brand.queryByRole("searchbox", { name: "Search brands" })).toBeNull();
   });
 
+  it("constrains the panel to the available viewport space below the trigger and remeasures on viewport changes", async () => {
+    const user = userEvent.setup();
+    const viewportHeight = vi.spyOn(window, "innerHeight", "get").mockReturnValue(900);
+    renderFilters({ q: "", brands: [], categories: [], sort: "name-asc", page: 1 });
+    const brand = getFacet("Brand");
+    const trigger = brand.getByRole("button", { name: "Brand" });
+
+    mockTriggerRect(trigger, { top: 100, bottom: 144 });
+    await user.click(trigger);
+
+    const panel = getPanel(trigger);
+    const expectedMaxHeight = 900 - 144 - VIEWPORT_MARGIN_PX - PANEL_GAP_PX;
+
+    expect(panel.style.maxHeight).toBe(`${expectedMaxHeight}px`);
+    expect(panel.className).toContain("top-full");
+    expect(panel.className).not.toContain("bottom-full");
+
+    viewportHeight.mockReturnValue(500);
+    fireEvent(window, new Event("resize"));
+
+    expect(panel.style.maxHeight).toBe(`${500 - 144 - VIEWPORT_MARGIN_PX - PANEL_GAP_PX}px`);
+  });
+
+  it("opens the panel upward when below-space is insufficient and above-space is larger", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(800);
+    renderFilters({ q: "", brands: [], categories: [], sort: "name-asc", page: 1 });
+    const brand = getFacet("Brand");
+    const trigger = brand.getByRole("button", { name: "Brand" });
+
+    mockTriggerRect(trigger, { top: 650, bottom: 694 });
+    await user.click(trigger);
+
+    const panel = getPanel(trigger);
+    const expectedMaxHeight = 650 - VIEWPORT_MARGIN_PX - PANEL_GAP_PX;
+
+    expect(panel.style.maxHeight).toBe(`${expectedMaxHeight}px`);
+    expect(panel.className).toContain("bottom-full");
+    expect(panel.className).not.toContain("top-full");
+  });
+
+  it("closes the dropdown when focus leaves it with Tab", async () => {
+    const user = userEvent.setup();
+    renderFilters({ q: "", brands: [], categories: [], sort: "name-asc", page: 1 });
+    const brand = getFacet("Brand");
+    const category = getFacet("Category");
+
+    await user.click(brand.getByRole("button", { name: "Brand" }));
+
+    brand.getByRole("searchbox", { name: "Search brands" }).focus();
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    await user.tab();
+
+    expect(document.activeElement).toBe(category.getByRole("button", { name: "Category" }));
+    expect(brand.queryByRole("searchbox", { name: "Search brands" })).toBeNull();
+  });
+
   it("opens with the keyboard, tabs through the search and options, and closes on Escape with focus returned", async () => {
     const user = userEvent.setup();
     renderFilters({ q: "", brands: [], categories: [], sort: "name-asc", page: 1 });
@@ -186,7 +269,7 @@ describe("ProductFilters", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
-  it("toggles options with Space and Enter without closing the dropdown", async () => {
+  it("toggles options with Space without closing the dropdown", async () => {
     const user = userEvent.setup();
     const { rerender } = renderFilters({ q: "shirt", brands: [], categories: [], sort: "price-desc", page: 3 });
     const brand = getFacet("Brand");
@@ -201,7 +284,7 @@ describe("ProductFilters", () => {
     rerender(<ProductFilters query={{ q: "shirt", brands: ["Northline"], categories: [], sort: "price-desc", page: 3 }} {...options} />);
 
     brand.getByRole("checkbox", { name: "Motion Lab" }).focus();
-    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
     expect(replace).toHaveBeenLastCalledWith("/products?ref=campaign&q=shirt&brand=Northline%2CMotion+Lab&sort=price-desc", { scroll: false });
     expect(brand.getByRole("searchbox", { name: "Search brands" })).toBeTruthy();
   });

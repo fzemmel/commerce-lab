@@ -64,7 +64,7 @@ export const Empty: Story = {
 export const NarrowViewport: Story = {
   decorators: [
     (Story) => (
-      <div className="w-80 max-w-full overflow-x-hidden rounded-3xl bg-slate-100 p-4">
+      <div className="flex min-h-[100dvh] w-80 max-w-full flex-col justify-end overflow-x-hidden bg-slate-100 p-4">
         <Story />
       </div>
     ),
@@ -72,7 +72,11 @@ export const NarrowViewport: Story = {
   play: async ({ canvas, userEvent }) => {
     await userEvent.click(canvas.getByRole("button", { name: "Brand" }));
 
-    await expect(canvas.getByRole("searchbox", { name: "Search brands" })).toBeVisible();
+    const search = canvas.getByRole("searchbox", { name: "Search brands" });
+    const panel = search.closest<HTMLElement>("[id$='-panel']");
+
+    await expect(search).toBeVisible();
+    await expect(panel?.style.maxHeight).toBeTruthy();
   },
 };
 
