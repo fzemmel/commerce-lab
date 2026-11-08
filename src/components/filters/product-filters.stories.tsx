@@ -34,23 +34,45 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-export const NoSelection: Story = {};
+export const Default: Story = {};
 
-export const SingleSelection: Story = {
+export const Selected: Story = {
   args: {
-    query: { q: "", brands: ["Northline"], categories: ["apparel"], sort: "name-asc", page: 1 },
+    query: { q: "", brands: ["Northline", "Motion Lab"], categories: ["apparel"], sort: "price-asc", page: 1 },
   },
 };
 
-export const MultipleSelections: Story = {
-  args: {
-    query: {
-      q: "",
-      brands: ["Northline", "Motion Lab"],
-      categories: ["apparel", "footwear"],
-      sort: "price-asc",
-      page: 1,
-    },
+export const Filtered: Story = {
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Brand" }));
+    await userEvent.type(canvas.getByRole("searchbox", { name: "Search brands" }), "motion");
+
+    await expect(canvas.getByRole("checkbox", { name: "Motion Lab" })).toBeVisible();
+    await expect(canvas.queryByRole("checkbox", { name: "Northline" })).toBeNull();
+  },
+};
+
+export const Empty: Story = {
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Brand" }));
+    await userEvent.type(canvas.getByRole("searchbox", { name: "Search brands" }), "zzz");
+
+    await expect(canvas.getByRole("status")).toHaveTextContent('No brands match "zzz".');
+  },
+};
+
+export const NarrowViewport: Story = {
+  decorators: [
+    (Story) => (
+      <div className="w-80 max-w-full overflow-x-hidden rounded-3xl bg-slate-100 p-4">
+        <Story />
+      </div>
+    ),
+  ],
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Brand" }));
+
+    await expect(canvas.getByRole("searchbox", { name: "Search brands" })).toBeVisible();
   },
 };
 
