@@ -1,8 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import type { ReactElement } from "react";
-import { expect } from "storybook/test";
+import { expect, fireEvent } from "storybook/test";
 
 import { ProductFilters } from "@/components/filters/product-filters";
+import { formatPrice } from "@/lib/format-price";
+import { positionToPrice, priceToPosition } from "@/lib/price-scale";
 
 const meta = {
   title: "Filters/ProductFilters",
@@ -181,15 +183,85 @@ export const PriceRangeSelected: Story = {
 
 export const PriceRangeKeyboard: Story = {
   play: async ({ canvas, userEvent }) => {
-    const minimum = canvas.getByRole("slider", { name: "Minimum price" });
-    const maximum = canvas.getByRole("slider", { name: "Maximum price" });
+    const minimum = canvas.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement;
+    const maximum = canvas.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement;
 
     minimum.focus();
-    await userEvent.keyboard("{ArrowRight}");
+    await userEvent.keyboard("{PageUp}");
     maximum.focus();
-    await userEvent.keyboard("{ArrowLeft}");
+    await userEvent.keyboard("{PageDown}");
 
-    await expect(canvas.getByText("€39 to €188")).toBeVisible();
+    await expect(minimum).toHaveValue("100");
+    await expect(maximum).toHaveValue("900");
+    await expect(canvas.getByText("€45 to €161")).toBeVisible();
+  },
+};
+
+export const PriceRangeCoincidentMaximum: Story = {
+  args: {
+    query: { q: "", brands: [], categories: [], price: { min: 189, max: 189 }, sort: "name-asc", page: 1 },
+  },
+  play: async ({ canvas, userEvent }) => {
+    const minimum = canvas.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement;
+    const maximum = canvas.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement;
+
+    await expect(Number(minimum.style.zIndex)).toBeGreaterThan(Number(maximum.style.zIndex));
+
+    minimum.focus();
+    await userEvent.keyboard("{PageDown}");
+
+    await expect(minimum).toHaveValue("900");
+    await expect(maximum).toHaveValue("1000");
+    await expect(canvas.getByText("€161 to €189")).toBeVisible();
+  },
+};
+
+export const PriceRangeCoincidentMinimum: Story = {
+  args: {
+    query: { q: "", brands: [], categories: [], price: { min: 38, max: 38 }, sort: "name-asc", page: 1 },
+  },
+  play: async ({ canvas, userEvent }) => {
+    const minimum = canvas.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement;
+    const maximum = canvas.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement;
+
+    await expect(Number(maximum.style.zIndex)).toBeGreaterThan(Number(minimum.style.zIndex));
+
+    maximum.focus();
+    await userEvent.keyboard("{PageUp}");
+
+    await expect(minimum).toHaveValue("0");
+    await expect(maximum).toHaveValue("100");
+    await expect(canvas.getByText("€38 to €45")).toBeVisible();
+  },
+};
+
+export const PriceRangeProductionBounds: Story = {
+  args: {
+    priceBounds: { min: 0.79, max: 36999.99, step: 0.01 },
+  },
+  play: async ({ canvas }) => {
+    const bounds = { min: 0.79, max: 36999.99, step: 0.01 };
+    const lowPosition = priceToPosition(1, bounds);
+    const highPosition = priceToPosition(30000, bounds);
+    const minimum = canvas.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement;
+    const maximum = canvas.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement;
+
+    await expect(minimum).toHaveAttribute("aria-valuetext", "€0.79, minimum price");
+    await expect(maximum).toHaveAttribute("aria-valuetext", "€36,999.99, maximum price");
+    await expect(canvas.getByText("€0.79 to €36,999.99")).toBeVisible();
+
+    fireEvent.change(maximum, { target: { value: String(lowPosition) } });
+
+    await expect(
+      canvas.getByText(`€0.79 to ${formatPrice(positionToPrice(lowPosition, bounds), 2)}`),
+    ).toBeVisible();
+
+    fireEvent.change(minimum, { target: { value: String(highPosition) } });
+    fireEvent.change(maximum, { target: { value: "1000" } });
+
+    await expect(
+      canvas.getByText(`${formatPrice(positionToPrice(highPosition, bounds), 2)} to €36,999.99`),
+    ).toBeVisible();
   },
 };
 
@@ -201,10 +273,12 @@ export const PriceRangeNarrowViewport: Story = {
   play: async ({ canvas }) => {
     const minimum = canvas.getByRole("slider", { name: "Minimum price" });
     const maximum = canvas.getByRole("slider", { name: "Maximum price" });
+    const priceRange = canvas.getByRole("group", { name: "Price range" });
 
     await expect(minimum).toBeVisible();
     await expect(maximum).toBeVisible();
     await expect(canvas.getByText("Catalog prices €38 to €189")).toBeVisible();
     await expect(canvas.getByText("€50 to €120")).toBeVisible();
+    await expect(priceRange.scrollWidth).toBeLessThanOrEqual(priceRange.clientWidth);
   },
 };

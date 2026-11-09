@@ -1,3 +1,4 @@
+import { countDecimalPlaces } from "@/lib/decimal";
 import type { Product, ProductCategory } from "@/types/product";
 
 export type ProductSort = "name-asc" | "price-asc" | "price-desc" | "rating-desc";
@@ -94,6 +95,48 @@ export function parsePriceRange(minValue: SearchParamValue | number, maxValue: S
   };
 }
 
+export type NormalizedPriceRange = {
+  /** Range clamped to the catalog bounds for the slider. Undefined when the request lies entirely outside the catalog. */
+  display: PriceRange | undefined;
+  /** Whether one or both requested bounds fall outside the catalog bounds. */
+  outOfBounds: boolean;
+};
+
+export function normalizePriceRange(price: PriceRange | undefined, bounds: PriceBounds): NormalizedPriceRange {
+  if (!price) {
+    return { display: undefined, outOfBounds: false };
+  }
+
+  if (bounds.max <= bounds.min) {
+    return { display: undefined, outOfBounds: true };
+  }
+
+  const { min, max } = price;
+
+  if (min !== undefined && max !== undefined && min > max) {
+    return { display: undefined, outOfBounds: false };
+  }
+
+  const belowCatalog = max !== undefined && max < bounds.min;
+  const aboveCatalog = min !== undefined && min > bounds.max;
+
+  if (belowCatalog || aboveCatalog) {
+    return { display: undefined, outOfBounds: true };
+  }
+
+  const displayMin = min === undefined ? undefined : Math.max(min, bounds.min);
+  const displayMax = max === undefined ? undefined : Math.min(max, bounds.max);
+  const outOfBounds = (min !== undefined && min < bounds.min) || (max !== undefined && max > bounds.max);
+
+  return {
+    display: {
+      ...(displayMin !== undefined ? { min: displayMin } : {}),
+      ...(displayMax !== undefined ? { max: displayMax } : {}),
+    },
+    outOfBounds,
+  };
+}
+
 export function formatCategoryLabel(category: ProductCategory) {
   return category
     .split(/[-_\s]+/)
@@ -169,14 +212,6 @@ export function applyProductQueryToSearchParams(searchParams: Pick<URLSearchPara
   return params;
 }
 
-function countDecimalPlaces(value: number) {
-  const [coefficient, exponentText] = Math.abs(value).toString().toLowerCase().split("e");
-  const fractionDigits = coefficient.split(".")[1]?.length ?? 0;
-  const exponent = exponentText ? Number.parseInt(exponentText, 10) : 0;
-
-  return Math.max(0, fractionDigits - exponent);
-}
-
 export function getPriceBounds(catalog: Product[]): PriceBounds {
   let minimum = Number.POSITIVE_INFINITY;
   let maximum = Number.NEGATIVE_INFINITY;
@@ -221,7 +256,10 @@ export function getProductBySlug(slug: string, catalog: Product[]) {
 
 export function queryProducts(query: ProductQuery, catalog: Product[]) {
   const search = query.q.toLowerCase();
-  const price = parsePriceRange(query.price?.min, query.price?.max);
+  const requestedPrice = parsePriceRange(query.price?.min, query.price?.max);
+  const priceBounds = requestedPrice ? getPriceBounds(catalog) : undefined;
+  const price =
+    requestedPrice && priceBounds ? (normalizePriceRange(requestedPrice, priceBounds).display ?? requestedPrice) : requestedPrice;
 
   return catalog
     .filter((product) => {

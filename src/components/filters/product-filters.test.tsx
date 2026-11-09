@@ -5,7 +5,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProductFilters } from "@/components/filters/product-filters";
+import { formatPrice } from "@/lib/format-price";
 import type { ProductQuery } from "@/lib/product-query";
+import { positionToPrice, priceToPosition } from "@/lib/price-scale";
 
 const VIEWPORT_MARGIN_PX = 16;
 const PANEL_GAP_PX = 8;
@@ -34,6 +36,10 @@ const options = {
 
 function renderFilters(query: ProductQuery) {
   return render(<ProductFilters query={query} {...options} />);
+}
+
+function positionForPrice(price: number) {
+  return String(priceToPosition(price, options.priceBounds));
 }
 
 function getFacet(label: "Brand" | "Category") {
@@ -523,7 +529,9 @@ describe("ProductFilters", () => {
     const user = userEvent.setup();
     renderFilters({ q: "shirt", brands: [], categories: [], sort: "price-desc", page: 3 });
 
-    fireEvent.change(screen.getByRole("slider", { name: "Minimum price" }), { target: { value: "50" } });
+    fireEvent.change(screen.getByRole("slider", { name: "Minimum price" }), {
+      target: { value: positionForPrice(50) },
+    });
     await user.click(screen.getByRole("button", { name: "Apply" }));
 
     expect(replace).toHaveBeenCalledWith("/products?ref=campaign&q=shirt&priceMin=50&sort=price-desc", { scroll: false });
@@ -533,7 +541,9 @@ describe("ProductFilters", () => {
     const user = userEvent.setup();
     renderFilters({ q: "shirt", brands: [], categories: [], sort: "price-desc", page: 3 });
 
-    fireEvent.change(screen.getByRole("slider", { name: "Maximum price" }), { target: { value: "100" } });
+    fireEvent.change(screen.getByRole("slider", { name: "Maximum price" }), {
+      target: { value: positionForPrice(100) },
+    });
     await user.click(screen.getByRole("button", { name: "Apply" }));
 
     expect(replace).toHaveBeenCalledWith("/products?ref=campaign&q=shirt&priceMax=100&sort=price-desc", { scroll: false });
@@ -543,60 +553,148 @@ describe("ProductFilters", () => {
     const user = userEvent.setup();
     renderFilters({ q: "shirt", brands: [], categories: [], sort: "price-desc", page: 3 });
 
-    fireEvent.change(screen.getByRole("slider", { name: "Minimum price" }), { target: { value: "50" } });
-    fireEvent.change(screen.getByRole("slider", { name: "Maximum price" }), { target: { value: "120" } });
+    fireEvent.change(screen.getByRole("slider", { name: "Minimum price" }), {
+      target: { value: positionForPrice(50) },
+    });
+    fireEvent.change(screen.getByRole("slider", { name: "Maximum price" }), {
+      target: { value: positionForPrice(120) },
+    });
     await user.click(screen.getByRole("button", { name: "Apply" }));
 
     expect(replace).toHaveBeenCalledWith("/products?ref=campaign&q=shirt&priceMin=50&priceMax=120&sort=price-desc", { scroll: false });
   });
 
-  it("moves both handles with the keyboard and applies the resulting range", async () => {
+  it("moves slider positions by one with arrows, ten percent with Shift and Page keys, and to the endpoints", async () => {
     const user = userEvent.setup();
-    renderFilters({ q: "shirt", brands: [], categories: [], sort: "price-desc", page: 3 });
+    renderFilters({ q: "", brands: [], categories: [], sort: "name-asc", page: 1 });
     const minimum = screen.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement;
     const maximum = screen.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement;
 
     minimum.focus();
-    expect(document.activeElement).toBe(minimum);
     await user.keyboard("{ArrowRight}");
-    expect(minimum.value).toBe("41");
+    expect(minimum.value).toBe("1");
+
+    await user.keyboard("{Shift>}{ArrowRight}{/Shift}");
+    expect(minimum.value).toBe("101");
+
+    await user.keyboard("{PageUp}");
+    expect(minimum.value).toBe("201");
+
+    await user.keyboard("{PageDown}");
+    expect(minimum.value).toBe("101");
+
+    await user.keyboard("{Home}");
+    expect(minimum.value).toBe("0");
+
+    await user.keyboard("{ArrowLeft}");
+    expect(minimum.value).toBe("0");
 
     maximum.focus();
-    expect(document.activeElement).toBe(maximum);
-    await user.keyboard("{ArrowLeft}");
-    expect(maximum.value).toBe("199");
+    await user.keyboard("{End}");
+    expect(maximum.value).toBe("1000");
 
-    expect(screen.getByText("€41 to €199")).toBeTruthy();
+    await user.keyboard("{ArrowRight}");
+    expect(maximum.value).toBe("1000");
+
+    await user.keyboard("{PageDown}");
+    expect(maximum.value).toBe("900");
+
+    await user.keyboard("{ArrowDown}");
+    expect(maximum.value).toBe("899");
+  });
+
+  it("applies a price range produced by keyboard position changes", async () => {
+    const user = userEvent.setup();
+    renderFilters({ q: "shirt", brands: [], categories: [], sort: "price-desc", page: 3 });
+    const minimum = screen.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement;
+    const maximum = screen.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement;
+    const expectedMinimum = positionToPrice(100, options.priceBounds);
+    const expectedMaximum = positionToPrice(900, options.priceBounds);
+
+    minimum.focus();
+    await user.keyboard("{PageUp}");
+
+    maximum.focus();
+    await user.keyboard("{PageDown}");
+
+    expect(screen.getByText(`${formatPrice(expectedMinimum)} to ${formatPrice(expectedMaximum)}`)).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Apply" }));
 
     expect(replace).toHaveBeenCalledWith(
-      "/products?ref=campaign&q=shirt&priceMin=41&priceMax=199&sort=price-desc",
+      `/products?ref=campaign&q=shirt&priceMin=${expectedMinimum}&priceMax=${expectedMaximum}&sort=price-desc`,
       { scroll: false },
     );
   });
 
-  it("clamps each handle so the minimum cannot exceed the maximum", async () => {
+  it("pushes the opposite handle when a handle crosses it", () => {
+    renderFilters({ q: "", brands: [], categories: [], sort: "name-asc", page: 1 });
+    const minimum = screen.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement;
+    const maximum = screen.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement;
+    const minimumPosition = positionForPrice(50);
+    const maximumPosition = positionForPrice(120);
+
+    fireEvent.change(minimum, { target: { value: maximumPosition } });
+    expect(minimum.value).toBe(maximumPosition);
+    expect(maximum.value).toBe("1000");
+
+    fireEvent.change(maximum, { target: { value: minimumPosition } });
+    expect(maximum.value).toBe(minimumPosition);
+    expect(minimum.value).toBe(minimumPosition);
+    expect(screen.getByText("€50 to €50")).toBeTruthy();
+
+    fireEvent.change(minimum, { target: { value: "1000" } });
+    expect(minimum.value).toBe("1000");
+    expect(maximum.value).toBe("1000");
+    expect(screen.getByText("€200 to €200")).toBeTruthy();
+
+    fireEvent.change(maximum, { target: { value: "0" } });
+    expect(maximum.value).toBe("0");
+    expect(minimum.value).toBe("0");
+    expect(screen.getByText("€40 to €40")).toBeTruthy();
+  });
+
+  it("raises the minimum handle when both handles coincide at the maximum bound", async () => {
     const user = userEvent.setup();
-    currentSearchParams = "q=shirt&priceMin=50&priceMax=120&sort=price-desc&page=3&ref=campaign";
-    renderFilters({ q: "shirt", brands: [], categories: [], price: { min: 50, max: 120 }, sort: "price-desc", page: 3 });
+    currentSearchParams = "q=shirt&priceMin=200&priceMax=200&sort=name-asc&page=1&ref=campaign";
+    renderFilters({ q: "shirt", brands: [], categories: [], price: { min: 200, max: 200 }, sort: "name-asc", page: 1 });
     const minimum = screen.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement;
     const maximum = screen.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement;
 
-    fireEvent.change(minimum, { target: { value: "250" } });
-    expect(minimum.value).toBe("120");
-    expect(screen.getByText("€120 to €120")).toBeTruthy();
+    expect(Number(minimum.style.zIndex)).toBeGreaterThan(Number(maximum.style.zIndex));
 
-    fireEvent.change(maximum, { target: { value: "10" } });
-    expect(maximum.value).toBe("120");
-    expect(screen.getByText("€120 to €120")).toBeTruthy();
+    await act(async () => {
+      maximum.focus();
+    });
+    expect(Number(maximum.style.zIndex)).toBeGreaterThan(Number(minimum.style.zIndex));
 
-    await user.click(screen.getByRole("button", { name: "Apply" }));
+    await act(async () => {
+      minimum.focus();
+    });
+    expect(Number(minimum.style.zIndex)).toBeGreaterThan(Number(maximum.style.zIndex));
 
-    expect(replace).toHaveBeenCalledWith(
-      "/products?ref=campaign&q=shirt&priceMin=120&priceMax=120&sort=price-desc",
-      { scroll: false },
-    );
+    await user.keyboard("{PageDown}");
+
+    expect(minimum.value).toBe("900");
+    expect(maximum.value).toBe("1000");
+    expect(screen.getByText("€170 to €200")).toBeTruthy();
+  });
+
+  it("raises the maximum handle when both handles coincide at the minimum bound", async () => {
+    const user = userEvent.setup();
+    currentSearchParams = "q=shirt&priceMin=40&priceMax=40&sort=name-asc&page=1&ref=campaign";
+    renderFilters({ q: "shirt", brands: [], categories: [], price: { min: 40, max: 40 }, sort: "name-asc", page: 1 });
+    const minimum = screen.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement;
+    const maximum = screen.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement;
+
+    expect(Number(maximum.style.zIndex)).toBeGreaterThan(Number(minimum.style.zIndex));
+
+    maximum.focus();
+    await user.keyboard("{PageUp}");
+
+    expect(maximum.value).toBe("100");
+    expect(minimum.value).toBe("0");
+    expect(screen.getByText("€40 to €47")).toBeTruthy();
   });
 
   it("clears both price bounds, resets the handles, and retains other active filters", async () => {
@@ -608,27 +706,121 @@ describe("ProductFilters", () => {
     await user.click(priceRange.getByRole("button", { name: "Clear" }));
 
     expect(replace).toHaveBeenCalledWith("/products?ref=campaign&q=shirt&brand=Northline&sort=price-desc", { scroll: false });
-    expect((priceRange.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement).value).toBe("40");
-    expect((priceRange.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement).value).toBe("200");
+    expect((priceRange.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement).value).toBe("0");
+    expect((priceRange.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement).value).toBe("1000");
     expect(priceRange.getByText("€40 to €200")).toBeTruthy();
   });
 
-  it("exposes catalog limits, current values, and touch-sized controls for narrow viewports", () => {
+  it("disables Clear when no price is applied and the handles are at the catalog bounds", () => {
+    renderFilters({ q: "", brands: [], categories: [], sort: "name-asc", page: 1 });
+    const priceRange = within(screen.getByRole("group", { name: "Price range" }));
+
+    expect((priceRange.getByRole("button", { name: "Clear" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("resets an unapplied price draft locally without navigating", async () => {
+    const user = userEvent.setup();
+    renderFilters({ q: "", brands: [], categories: [], sort: "name-asc", page: 1 });
+    const priceRange = within(screen.getByRole("group", { name: "Price range" }));
+    const minimum = priceRange.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement;
+    const maximum = priceRange.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement;
+
+    fireEvent.change(minimum, { target: { value: positionForPrice(50) } });
+    expect((priceRange.getByRole("button", { name: "Clear" }) as HTMLButtonElement).disabled).toBe(false);
+
+    await user.click(priceRange.getByRole("button", { name: "Clear" }));
+
+    expect(replace).not.toHaveBeenCalled();
+    expect(minimum.value).toBe("0");
+    expect(maximum.value).toBe("1000");
+    expect(priceRange.getByText("€40 to €200")).toBeTruthy();
+  });
+
+  it("resets an unapplied price draft when the global Reset control is used", async () => {
+    const user = userEvent.setup();
+    renderFilters({ q: "", brands: [], categories: [], sort: "name-asc", page: 1 });
+    const priceRange = within(screen.getByRole("group", { name: "Price range" }));
+    const minimum = priceRange.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement;
+
+    fireEvent.change(minimum, { target: { value: positionForPrice(50) } });
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+
+    expect(replace).toHaveBeenCalledWith("/products", { scroll: false });
+    expect((screen.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement).value).toBe("0");
+    expect((screen.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement).value).toBe("1000");
+  });
+
+  it("does not clamp an out-of-catalog URL range onto the slider", () => {
+    currentSearchParams = "q=shirt&priceMin=500&sort=name-asc&page=1&ref=campaign";
+    renderFilters({ q: "shirt", brands: [], categories: [], price: { min: 500 }, sort: "name-asc", page: 1 });
+    const priceRange = within(screen.getByRole("group", { name: "Price range" }));
+
+    expect((priceRange.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement).value).toBe("0");
+    expect((priceRange.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement).value).toBe("1000");
+    expect(priceRange.getByText("The requested price range is outside the available catalog prices.")).toBeTruthy();
+    expect((priceRange.getByRole("button", { name: "Clear" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("preserves price bounds when brand, category, or sort changes", async () => {
+    const user = userEvent.setup();
+    currentSearchParams = "q=shirt&priceMin=50&priceMax=120&sort=name-asc&page=2";
+    const { rerender } = renderFilters({ q: "shirt", brands: [], categories: [], price: { min: 50, max: 120 }, sort: "name-asc", page: 2 });
+    const brand = getFacet("Brand");
+    const category = getFacet("Category");
+
+    await user.click(brand.getByRole("button", { name: "Brand" }));
+    await user.click(brand.getByRole("checkbox", { name: "Northline" }));
+
+    expect(replace).toHaveBeenLastCalledWith("/products?q=shirt&brand=Northline&priceMin=50&priceMax=120", { scroll: false });
+
+    currentSearchParams = "q=shirt&brand=Northline&priceMin=50&priceMax=120&sort=name-asc";
+    rerender(
+      <ProductFilters
+        query={{ q: "shirt", brands: ["Northline"], categories: [], price: { min: 50, max: 120 }, sort: "name-asc", page: 1 }}
+        {...options}
+      />,
+    );
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Sort by" }), "price-desc");
+
+    expect(replace).toHaveBeenLastCalledWith(
+      "/products?q=shirt&brand=Northline&priceMin=50&priceMax=120&sort=price-desc",
+      { scroll: false },
+    );
+
+    currentSearchParams = "q=shirt&brand=Northline&priceMin=50&priceMax=120&sort=price-desc";
+    rerender(
+      <ProductFilters
+        query={{ q: "shirt", brands: ["Northline"], categories: [], price: { min: 50, max: 120 }, sort: "price-desc", page: 1 }}
+        {...options}
+      />,
+    );
+
+    await user.click(category.getByRole("button", { name: "Category" }));
+    await user.click(category.getByRole("checkbox", { name: "Apparel" }));
+
+    expect(replace).toHaveBeenLastCalledWith(
+      "/products?q=shirt&brand=Northline&category=apparel&priceMin=50&priceMax=120&sort=price-desc",
+      { scroll: false },
+    );
+  });
+
+  it("exposes catalog limits, price-based accessible values, and touch-sized controls for narrow viewports", () => {
     renderFilters({ q: "", brands: [], categories: [], sort: "name-asc", page: 1 });
     const priceRange = within(screen.getByRole("group", { name: "Price range" }));
     const minimum = priceRange.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement;
     const maximum = priceRange.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement;
     const sliderRow = minimum.parentElement as HTMLElement;
 
-    expect(minimum.getAttribute("min")).toBe("40");
-    expect(minimum.getAttribute("max")).toBe("200");
+    expect(minimum.getAttribute("min")).toBe("0");
+    expect(minimum.getAttribute("max")).toBe("1000");
     expect(minimum.getAttribute("step")).toBe("1");
-    expect(maximum.getAttribute("min")).toBe("40");
-    expect(maximum.getAttribute("max")).toBe("200");
+    expect(maximum.getAttribute("min")).toBe("0");
+    expect(maximum.getAttribute("max")).toBe("1000");
     expect(minimum.getAttribute("aria-valuetext")).toBe("€40, minimum price");
     expect(maximum.getAttribute("aria-valuetext")).toBe("€200, maximum price");
     expect(minimum.getAttribute("aria-describedby")).toContain("price-range-help");
-    expect(minimum.getAttribute("aria-describedby")).toContain("price-range-summary");
+    expect(minimum.getAttribute("aria-describedby")).not.toContain("price-range-summary");
 
     expect(minimum.className).toContain("h-11");
     expect(minimum.className).toContain("w-full");
@@ -646,6 +838,7 @@ describe("ProductFilters", () => {
     expect((priceRange.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement).disabled).toBe(true);
     expect((priceRange.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement).disabled).toBe(true);
     expect((priceRange.getByRole("button", { name: "Apply" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((priceRange.getByRole("button", { name: "Clear" }) as HTMLButtonElement).disabled).toBe(true);
     expect(priceRange.getByText("Price filter unavailable")).toBeTruthy();
   });
 
@@ -654,7 +847,50 @@ describe("ProductFilters", () => {
 
     rerender(<ProductFilters query={{ q: "", brands: [], categories: [], price: { min: 100, max: 200 }, sort: "name-asc", page: 1 }} {...options} />);
 
-    expect((screen.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement).value).toBe("100");
-    expect((screen.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement).value).toBe("200");
+    expect((screen.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement).value).toBe(
+      String(priceToPosition(100, options.priceBounds)),
+    );
+    expect((screen.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement).value).toBe("1000");
+  });
+
+  it("makes low and high prices reachable with production-like catalog bounds", () => {
+    const productionBounds = { min: 0.79, max: 36999.99, step: 0.01 };
+    const lowPosition = priceToPosition(1, productionBounds);
+    const highPosition = priceToPosition(30000, productionBounds);
+
+    render(
+      <ProductFilters
+        query={{ q: "", brands: [], categories: [], sort: "name-asc", page: 1 }}
+        {...options}
+        priceBounds={productionBounds}
+      />,
+    );
+
+    const priceRange = within(screen.getByRole("group", { name: "Price range" }));
+    const minimum = priceRange.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement;
+    const maximum = priceRange.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement;
+
+    expect(minimum.getAttribute("min")).toBe("0");
+    expect(minimum.getAttribute("max")).toBe("1000");
+    expect(minimum.getAttribute("step")).toBe("1");
+    expect(minimum.getAttribute("aria-valuetext")).toBe("€0.79, minimum price");
+    expect(maximum.getAttribute("aria-valuetext")).toBe("€36,999.99, maximum price");
+    expect(priceRange.getByText("Catalog prices €0.79 to €36,999.99")).toBeTruthy();
+    expect(lowPosition).toBeGreaterThanOrEqual(20);
+    expect(lowPosition).toBeLessThan(30);
+    expect(highPosition).toBeGreaterThanOrEqual(980);
+
+    fireEvent.change(maximum, { target: { value: String(lowPosition) } });
+
+    expect(
+      priceRange.getByText(`€0.79 to ${formatPrice(positionToPrice(lowPosition, productionBounds), 2)}`),
+    ).toBeTruthy();
+
+    fireEvent.change(minimum, { target: { value: String(highPosition) } });
+    fireEvent.change(maximum, { target: { value: "1000" } });
+
+    expect(
+      priceRange.getByText(`${formatPrice(positionToPrice(highPosition, productionBounds), 2)} to €36,999.99`),
+    ).toBeTruthy();
   });
 });

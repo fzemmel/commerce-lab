@@ -7,14 +7,24 @@ import { FacetFilter } from "@/components/filters/facet-filter";
 import { SearchInput } from "@/components/filters/search-input";
 import { SortSelect } from "@/components/filters/sort-select";
 import { Button } from "@/components/ui/button";
+import { countDecimalPlaces } from "@/lib/decimal";
 import { formatPrice } from "@/lib/format-price";
 import {
   applyProductQueryToSearchParams,
+  normalizePriceRange,
   type PriceBounds,
   type PriceRange,
   type ProductQuery,
   type ProductSort,
 } from "@/lib/product-query";
+import {
+  clampPricePosition,
+  positionToPrice,
+  priceToPosition,
+  PRICE_POSITION_MAX,
+  PRICE_POSITION_MIN,
+  PRICE_POSITION_STEP,
+} from "@/lib/price-scale";
 import type { ProductCategory } from "@/types/product";
 
 type ProductFiltersProps = {
@@ -29,6 +39,7 @@ export function ProductFilters({ query, brandOptions, categoryOptions, priceBoun
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, beginTransition] = useTransition();
+  const [resetCount, setResetCount] = useState(0);
 
   function updateUrl(updates: Partial<ProductQuery>) {
     beginTransition(() => {
@@ -52,6 +63,7 @@ export function ProductFilters({ query, brandOptions, categoryOptions, priceBoun
   }
 
   function resetFilters() {
+    setResetCount((count) => count + 1);
     beginTransition(() => router.replace(pathname, { scroll: false }));
   }
 
@@ -83,7 +95,7 @@ export function ProductFilters({ query, brandOptions, categoryOptions, priceBoun
         />
       </div>
       <PriceRangeControl
-        key={`${query.price?.min ?? ""}-${query.price?.max ?? ""}-${priceBounds.min}-${priceBounds.max}-${priceBounds.step}`}
+        key={`${query.price?.min ?? ""}-${query.price?.max ?? ""}-${priceBounds.min}-${priceBounds.max}-${priceBounds.step}-${resetCount}`}
         bounds={priceBounds}
         initialPrice={query.price}
         onApply={(price) => updateUrl({ price })}
@@ -105,31 +117,7 @@ type PriceRangeControlProps = {
   onClear: () => void;
 };
 
-function countStepFractionDigits(step: number) {
-  const [coefficient, exponentText] = String(step).toLowerCase().split("e");
-  const fractionDigits = coefficient.split(".")[1]?.length ?? 0;
-  const exponent = exponentText ? Number.parseInt(exponentText, 10) : 0;
-
-  return Math.min(6, Math.max(0, fractionDigits - exponent));
-}
-
-function clampPrice(value: number, bounds: PriceBounds) {
-  return Math.min(bounds.max, Math.max(bounds.min, value));
-}
-
-function snapPrice(value: number, bounds: PriceBounds) {
-  if (!Number.isFinite(value)) {
-    return bounds.min;
-  }
-
-  if (bounds.step <= 0) {
-    return clampPrice(value, bounds);
-  }
-
-  const steps = Math.round((value - bounds.min) / bounds.step);
-
-  return clampPrice(Number((bounds.min + steps * bounds.step).toFixed(10)), bounds);
-}
+type PriceHandle = "minimum" | "maximum";
 
 function PriceRangeControl({ bounds, initialPrice, onApply, onClear }: PriceRangeControlProps) {
   const id = useId();
@@ -138,50 +126,91 @@ function PriceRangeControl({ bounds, initialPrice, onApply, onClear }: PriceRang
   const helpId = `${id}-price-range-help`;
   const summaryId = `${id}-price-range-summary`;
   const hasRange = bounds.max > bounds.min;
-  const initialMinimum = clampPrice(initialPrice?.min ?? bounds.min, bounds);
-  const initialMaximum = clampPrice(initialPrice?.max ?? bounds.max, bounds);
-  const [minimumPrice, setMinimumPrice] = useState(initialMinimum);
-  const [maximumPrice, setMaximumPrice] = useState(Math.max(initialMinimum, initialMaximum));
-  const fractionDigits = countStepFractionDigits(bounds.step);
+  const fractionDigits = countDecimalPlaces(bounds.step);
+  const normalizedPrice = normalizePriceRange(initialPrice, bounds);
+  const initialDisplay = normalizedPrice.display;
+  const initialMinimumPosition = hasRange ? priceToPosition(initialDisplay?.min ?? bounds.min, bounds) : PRICE_POSITION_MIN;
+  const initialMaximumPosition = hasRange ? priceToPosition(initialDisplay?.max ?? bounds.max, bounds) : PRICE_POSITION_MIN;
+  const [minimumPosition, setMinimumPosition] = useState(initialMinimumPosition);
+  const [maximumPosition, setMaximumPosition] = useState(Math.max(initialMinimumPosition, initialMaximumPosition));
+  const [activeHandle, setActiveHandle] = useState<PriceHandle | null>(null);
+  const minimumPrice = positionToPrice(minimumPosition, bounds);
+  const maximumPrice = positionToPrice(maximumPosition, bounds);
   const formattedMinimum = formatPrice(minimumPrice, fractionDigits);
   const formattedMaximum = formatPrice(maximumPrice, fractionDigits);
-  const range = bounds.max - bounds.min;
-  const minimumPercent = hasRange ? ((minimumPrice - bounds.min) / range) * 100 : 0;
-  const maximumPercent = hasRange ? ((maximumPrice - bounds.min) / range) * 100 : 100;
+  const minimumPercent = hasRange ? (minimumPosition / PRICE_POSITION_MAX) * 100 : 0;
+  const maximumPercent = hasRange ? (maximumPosition / PRICE_POSITION_MAX) * 100 : 100;
+  const handlesAtBounds = minimumPosition === PRICE_POSITION_MIN && maximumPosition === PRICE_POSITION_MAX;
+  const hasAppliedPrice = initialPrice !== undefined;
+  const canClear = hasAppliedPrice || (hasRange && !handlesAtBounds);
+  const coincidentAtMaximum = hasRange && minimumPosition === maximumPosition && maximumPosition === PRICE_POSITION_MAX;
+  const coincidentAtMinimum = hasRange && minimumPosition === maximumPosition && minimumPosition === PRICE_POSITION_MIN;
 
-  function updateMinimum(value: number) {
-    setMinimumPrice(Math.min(snapPrice(value, bounds), maximumPrice));
+  function updateMinimumPosition(nextPosition: number) {
+    const position = clampPricePosition(nextPosition);
+
+    setMinimumPosition(position);
+
+    if (position > maximumPosition) {
+      setMaximumPosition(position);
+    }
   }
 
-  function updateMaximum(value: number) {
-    setMaximumPrice(Math.max(snapPrice(value, bounds), minimumPrice));
+  function updateMaximumPosition(nextPosition: number) {
+    const position = clampPricePosition(nextPosition);
+
+    setMaximumPosition(position);
+
+    if (position < minimumPosition) {
+      setMinimumPosition(position);
+    }
   }
 
-  function handleKeyDown(handle: "minimum" | "maximum", event: KeyboardEvent<HTMLInputElement>) {
-    const currentValue = handle === "minimum" ? minimumPrice : maximumPrice;
-    const increment = event.shiftKey ? bounds.step * 10 : bounds.step;
-    let nextValue: number | undefined;
+  function handleZIndex(handle: PriceHandle) {
+    if (activeHandle === handle) {
+      return 30;
+    }
+
+    if (activeHandle) {
+      return 20;
+    }
+
+    if (coincidentAtMaximum) {
+      return handle === "minimum" ? 30 : 20;
+    }
+
+    if (coincidentAtMinimum) {
+      return handle === "maximum" ? 30 : 20;
+    }
+
+    return handle === "maximum" ? 30 : 20;
+  }
+
+  function handleKeyDown(handle: PriceHandle, event: KeyboardEvent<HTMLInputElement>) {
+    const currentPosition = handle === "minimum" ? minimumPosition : maximumPosition;
+    const pageIncrement = PRICE_POSITION_MAX / 10;
+    let nextPosition: number | undefined;
 
     switch (event.key) {
       case "ArrowRight":
       case "ArrowUp":
-        nextValue = currentValue + increment;
+        nextPosition = currentPosition + (event.shiftKey ? pageIncrement : PRICE_POSITION_STEP);
         break;
       case "ArrowLeft":
       case "ArrowDown":
-        nextValue = currentValue - increment;
+        nextPosition = currentPosition - (event.shiftKey ? pageIncrement : PRICE_POSITION_STEP);
         break;
       case "PageUp":
-        nextValue = currentValue + bounds.step * 10;
+        nextPosition = currentPosition + pageIncrement;
         break;
       case "PageDown":
-        nextValue = currentValue - bounds.step * 10;
+        nextPosition = currentPosition - pageIncrement;
         break;
       case "Home":
-        nextValue = bounds.min;
+        nextPosition = PRICE_POSITION_MIN;
         break;
       case "End":
-        nextValue = bounds.max;
+        nextPosition = PRICE_POSITION_MAX;
         break;
       default:
         return;
@@ -190,9 +219,9 @@ function PriceRangeControl({ bounds, initialPrice, onApply, onClear }: PriceRang
     event.preventDefault();
 
     if (handle === "minimum") {
-      updateMinimum(nextValue);
+      updateMinimumPosition(nextPosition);
     } else {
-      updateMaximum(nextValue);
+      updateMaximumPosition(nextPosition);
     }
   }
 
@@ -206,9 +235,13 @@ function PriceRangeControl({ bounds, initialPrice, onApply, onClear }: PriceRang
   }
 
   function clearPriceRange() {
-    setMinimumPrice(bounds.min);
-    setMaximumPrice(bounds.max);
-    onClear();
+    setMinimumPosition(PRICE_POSITION_MIN);
+    setMaximumPosition(PRICE_POSITION_MAX);
+    setActiveHandle(null);
+
+    if (hasAppliedPrice) {
+      onClear();
+    }
   }
 
   return (
@@ -224,6 +257,11 @@ function PriceRangeControl({ bounds, initialPrice, onApply, onClear }: PriceRang
           {hasRange ? `${formattedMinimum} to ${formattedMaximum}` : "Price filter unavailable"}
         </output>
       </div>
+      {normalizedPrice.outOfBounds ? (
+        <p className="mt-1 text-sm font-medium text-amber-800">
+          The requested price range is outside the available catalog prices.
+        </p>
+      ) : null}
       <div className="mt-2 min-w-0">
         <div className="relative h-11 w-full min-w-0">
           <span aria-hidden="true" className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-slate-200" />
@@ -235,30 +273,36 @@ function PriceRangeControl({ bounds, initialPrice, onApply, onClear }: PriceRang
           <input
             id={minimumId}
             type="range"
-            min={bounds.min}
-            max={bounds.max}
-            step={bounds.step}
-            value={minimumPrice}
+            min={PRICE_POSITION_MIN}
+            max={PRICE_POSITION_MAX}
+            step={PRICE_POSITION_STEP}
+            value={minimumPosition}
             disabled={!hasRange}
             aria-valuetext={`${formattedMinimum}, minimum price`}
-            aria-describedby={`${helpId} ${summaryId}`}
-            onChange={(event) => updateMinimum(Number(event.target.value))}
+            aria-describedby={helpId}
+            onChange={(event) => updateMinimumPosition(Number(event.target.value))}
             onKeyDown={(event) => handleKeyDown("minimum", event)}
+            onPointerDown={() => setActiveHandle("minimum")}
+            onFocus={() => setActiveHandle("minimum")}
             className="price-range-input absolute inset-0 h-11 w-full"
+            style={{ zIndex: handleZIndex("minimum") }}
           />
           <input
             id={maximumId}
             type="range"
-            min={bounds.min}
-            max={bounds.max}
-            step={bounds.step}
-            value={maximumPrice}
+            min={PRICE_POSITION_MIN}
+            max={PRICE_POSITION_MAX}
+            step={PRICE_POSITION_STEP}
+            value={maximumPosition}
             disabled={!hasRange}
             aria-valuetext={`${formattedMaximum}, maximum price`}
-            aria-describedby={`${helpId} ${summaryId}`}
-            onChange={(event) => updateMaximum(Number(event.target.value))}
+            aria-describedby={helpId}
+            onChange={(event) => updateMaximumPosition(Number(event.target.value))}
             onKeyDown={(event) => handleKeyDown("maximum", event)}
+            onPointerDown={() => setActiveHandle("maximum")}
+            onFocus={() => setActiveHandle("maximum")}
             className="price-range-input absolute inset-0 h-11 w-full"
+            style={{ zIndex: handleZIndex("maximum") }}
           />
         </div>
         <div className="mt-1 grid grid-cols-2 gap-4">
@@ -284,7 +328,7 @@ function PriceRangeControl({ bounds, initialPrice, onApply, onClear }: PriceRang
         <Button type="button" variant="outline" onClick={applyPriceRange} disabled={!hasRange}>
           Apply
         </Button>
-        <Button type="button" variant="ghost" onClick={clearPriceRange}>
+        <Button type="button" variant="ghost" onClick={clearPriceRange} disabled={!canClear}>
           Clear
         </Button>
       </div>

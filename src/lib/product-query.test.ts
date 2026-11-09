@@ -7,6 +7,7 @@ import {
   getCategoryOptions,
   getPriceBounds,
   getProductBySlug,
+  normalizePriceRange,
   paginateProducts,
   parseProductQuery,
   queryProducts,
@@ -145,6 +146,45 @@ describe("product query serialization", () => {
   });
 });
 
+describe("normalizePriceRange", () => {
+  const bounds = { min: 40, max: 200, step: 1 };
+
+  it("returns no display range when no price is requested", () => {
+    expect(normalizePriceRange(undefined, bounds)).toEqual({ display: undefined, outOfBounds: false });
+  });
+
+  it("keeps ranges inside the catalog bounds", () => {
+    expect(normalizePriceRange({ min: 50, max: 120 }, bounds)).toEqual({
+      display: { min: 50, max: 120 },
+      outOfBounds: false,
+    });
+  });
+
+  it("clamps partially out-of-range bounds and flags them", () => {
+    expect(normalizePriceRange({ min: 10, max: 250 }, bounds)).toEqual({
+      display: { min: 40, max: 200 },
+      outOfBounds: true,
+    });
+    expect(normalizePriceRange({ min: 10 }, bounds)).toEqual({
+      display: { min: 40 },
+      outOfBounds: true,
+    });
+  });
+
+  it("does not clamp ranges that lie entirely outside the catalog", () => {
+    expect(normalizePriceRange({ min: 500 }, bounds)).toEqual({ display: undefined, outOfBounds: true });
+    expect(normalizePriceRange({ max: 10 }, bounds)).toEqual({ display: undefined, outOfBounds: true });
+  });
+
+  it("ignores reversed ranges and collapsed catalog bounds", () => {
+    expect(normalizePriceRange({ min: 200, max: 50 }, bounds)).toEqual({ display: undefined, outOfBounds: false });
+    expect(normalizePriceRange({ min: 10 }, { min: 40, max: 40, step: 1 })).toEqual({
+      display: undefined,
+      outOfBounds: true,
+    });
+  });
+});
+
 describe("queryProducts", () => {
   it("searches by name, brand, and description case-insensitively", () => {
     expect(queryProducts({ ...defaultQuery, q: "alpha" }, catalog).map((product) => product.slug)).toEqual(["alpha-shirt"]);
@@ -174,6 +214,11 @@ describe("queryProducts", () => {
     expect(queryProducts({ ...defaultQuery, price: { min: 50 } }, catalog).map((product) => product.slug)).toEqual(["alpha-shirt", "bravo-runner"]);
     expect(queryProducts({ ...defaultQuery, price: { max: 50 } }, catalog).map((product) => product.slug)).toEqual(["alpha-shirt", "carry-tote"]);
     expect(queryProducts({ ...defaultQuery, price: { min: 50, max: 120 } }, catalog).map((product) => product.slug)).toEqual(["alpha-shirt", "bravo-runner"]);
+  });
+
+  it("preserves out-of-catalog price bounds for filtering instead of clamping them to the catalog", () => {
+    expect(queryProducts({ ...defaultQuery, price: { min: 500 } }, catalog)).toEqual([]);
+    expect(queryProducts({ ...defaultQuery, price: { max: 10 } }, catalog)).toEqual([]);
   });
 
   it("sorts by name ascending by default and does not mutate the catalog", () => {

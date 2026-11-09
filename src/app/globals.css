@@ -43,9 +43,9 @@ body {
 .price-range-input::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 1.5rem;
-  height: 1.5rem;
-  margin-top: -0.5625rem;
+  width: 2rem;
+  height: 2rem;
+  margin-top: -0.8125rem;
   border: 2px solid #ffffff;
   border-radius: 9999px;
   background: #0f172a;
@@ -55,8 +55,8 @@ body {
 }
 
 .price-range-input::-moz-range-thumb {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 2rem;
+  height: 2rem;
   border: 2px solid #ffffff;
   border-radius: 9999px;
   background: #0f172a;
@@ -70,11 +70,11 @@ body {
 }
 
 .price-range-input:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 1px #0f172a, 0 0 0 5px #f59e0b;
+  box-shadow: 0 0 0 1px #0f172a, 0 0 0 5px #b45309;
 }
 
 .price-range-input:focus-visible::-moz-range-thumb {
-  box-shadow: 0 0 0 1px #0f172a, 0 0 0 5px #f59e0b;
+  box-shadow: 0 0 0 1px #0f172a, 0 0 0 5px #b45309;
 }
 
 .price-range-input:disabled::-webkit-slider-thumb {
