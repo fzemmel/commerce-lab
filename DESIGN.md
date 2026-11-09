@@ -1,5 +1,7 @@
 # Design
 
+> Developer documentation lives in `docs/` and is built with VitePress. Start at `docs/index.md` or run `pnpm docs:dev`. This document remains the architectural source of truth.
+
 ## System overview
 
 Commerce Lab is a Next.js 16 App Router product-discovery application using React 19, TypeScript, Tailwind CSS, Vitest, Storybook, and Lighthouse CI.
@@ -51,7 +53,7 @@ Route pages and data-reading components are Server Components by default. Client
 
 ## Validation and delivery
 
-ESLint, TypeScript checking, Vitest, the production Next.js build, the static Storybook build, and Lighthouse CI validate the repository. The standalone Docker image is published by the deploy job, which then updates the production service.
+ESLint, TypeScript checking, Vitest, the VitePress documentation build, the production Next.js build, the static Storybook build, and Lighthouse CI validate the repository. The standalone Docker image is published by the deploy job, which then updates the production service.
 
 ## Architectural invariants
 

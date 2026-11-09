@@ -1,6 +1,37 @@
 # Commerce Lab
 
-Commerce Lab is a Next.js product discovery app. Use React and Next.js App Router in a commerce context: product listing, faceted search, URL-driven state, server-rendered routes, external product data, and reusable UI components.
+Commerce Lab is a Next.js 16 App Router product-discovery application built with React 19, TypeScript, Tailwind CSS, Vitest, Storybook, and Lighthouse CI. It demonstrates server-rendered product discovery with URL-driven search, multi-select facets, price filtering, sorting, pagination, and comparison.
+
+## Documentation
+
+Comprehensive documentation lives in the VitePress site under [`docs/`](docs/index.md).
+
+| Topic | Page |
+| --- | --- |
+| Project purpose, stack, and routes | [Project overview](docs/overview.md) |
+| Search, filters, sorting, pagination, comparison | [Product discovery](docs/product-discovery.md) |
+| Installation, commands, tests, Storybook, docs | [Getting started](docs/getting-started.md) |
+| App Router, Server/Client boundaries, modules | [Application architecture](docs/architecture.md) |
+| DummyJSON mapping, ISR, fallback, comparison state | [Product data and caching](docs/product-data.md) |
+| Contributing, CI, Dependabot, quality expectations | [Contributing and quality](docs/contributing.md) |
+| Production build and container delivery | [Deployment](docs/deployment.md) |
+| Milestone Autopilot overview | [Milestone Autopilot](docs/milestone-autopilot.md) |
+| Detailed autopilot reference | [Autopilot reference](docs/AUTOPILOT.md) |
+| OpenAI pull-request review gate | [AI code review](docs/ai-code-review.md) |
+
+Run the documentation locally:
+
+```bash
+pnpm docs:dev
+```
+
+Build the static documentation site:
+
+```bash
+pnpm docs:build
+```
+
+The build is part of `pnpm verify` and is validated by CI. `DESIGN.md` remains the architectural source of truth.
 
 ## Tech Stack
 
@@ -8,187 +39,101 @@ Commerce Lab is a Next.js product discovery app. Use React and Next.js App Route
 - React 19
 - TypeScript
 - Tailwind CSS 4
-- ESLint
+- Vitest and Testing Library
 - Storybook
+- Lighthouse CI
+- VitePress
 - DummyJSON product API with local fallback data
-- `src/` directory and `@/*` import alias
+- pnpm 10 and Node.js 22
 
 ## Features
 
-- Landing page at `/`
+- Landing page at `/` with a featured catalog sample
 - Product listing at `/products`
 - Product detail pages at `/products/[slug]`
-- External product catalog from DummyJSON with local mock products as a fallback
-- Real product imagery rendered with `next/image`
-- Product cards with brand, category, price, sale price, rating, and badges
+- Side-by-side comparison at `/compare` for up to four products
 - Search across product name, brand, and description
-- Dynamic category filter based on the loaded catalog
+- Searchable multi-select brand and category filters
+- Catalog-bounded price range slider
 - Sorting by name, price ascending, price descending, and rating descending
 - Server-rendered pagination with 24 products per page
-- URL-synchronized query state such as `/products?q=mascara&category=beauty&sort=price-asc&page=2`
-- Empty state for searches without matches
-- Loading, error, and not-found route structure
-- Isolated component stories for UI primitives and product components
-- Responsive Tailwind layout
+- URL-synchronized query state
+- Empty, loading, error, not-found, and fallback states
+- Isolated component stories and responsive Tailwind layouts
 
-## Architecture Decisions
+## Quick Start
 
-- Product data is loaded from DummyJSON in `src/lib/products-api.ts` with ISR caching and a local fallback catalog in `src/data/products.ts`.
-- Product domain types live in `src/types/product.ts`.
-- Filtering, sorting, pagination, query parsing, dynamic category labels, and product lookup live in `src/lib/product-query.ts`.
-- Reusable product UI is grouped under `src/components/product`.
-- Interactive listing controls are grouped under `src/components/filters`.
-- Generic primitives such as `Button`, `Badge`, `Input`, and `Select` are grouped under `src/components/ui`.
-- Storybook is used for local component review and static build validation, but is not deployed separately.
-- Global state libraries are intentionally avoided. The URL is the source of truth for listing state.
-
-## Server Components vs. Client Components
-
-Pages are Server Components by default. The product listing reads `searchParams`, loads the product catalog on the server, parses the query, filters the catalog, and renders the product grid on the server.
-
-The external catalog is fetched with ISR so product data is cached and revalidated periodically instead of being requested on every page view:
-
-```ts
-fetch("https://dummyjson.com/products?limit=200", {
-  next: { revalidate: 3600 },
-});
-```
-
-Client Components are only used where browser interaction is required. `ProductFilters` uses Next navigation 
-hooks to update the URL when the user searches, changes category, changes sorting, or resets filters. 
-Once the URL changes, the server page receives new `searchParams` and renders the updated listing.
-
-This keeps the data-reading path simple and server-first while still providing an interactive search and filter experience.
-
-## Local Setup
-
-Node.js 22 is required for local development and automation.
-
-Install dependencies:
+Node.js 22 and pnpm 10.24.0 are required.
 
 ```bash
-pnpm install
-```
-
-Start the development server:
-
-```bash
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Run linting:
+The application runs at `http://localhost:3000` by default.
 
-```bash
-pnpm lint
-```
+## Essential Commands
 
-Run the fast development quality gate (linting, type checking, and unit tests):
+| Command | Purpose |
+| --- | --- |
+| `pnpm dev` | Start the development server. |
+| `pnpm check` | Run linting, type checking, and unit tests. |
+| `pnpm verify` | Run check, the documentation build, production build, Storybook build, and Lighthouse CI. |
+| `pnpm test` | Run unit tests. |
+| `pnpm storybook` | Start Storybook on port 6006. |
+| `pnpm build` | Build the production application. |
+| `pnpm start` | Start the standalone production server. |
+| `pnpm docs:dev` | Start the VitePress documentation site. |
+| `pnpm docs:build` | Build the static documentation site. |
+| `pnpm docs:preview` | Preview the built documentation site. |
 
-```bash
-pnpm check
-```
+See [Getting started](docs/getting-started.md) for prerequisites, Lighthouse port configuration, and the complete command reference.
 
-Run the complete CI-equivalent validation pipeline (including production and Storybook builds, and Lighthouse audits):
-
-```bash
-pnpm verify
-```
-
-Lighthouse starts its own production server on `127.0.0.1:3100` to avoid conflicting with development servers on port 3000. Set `LHCI_PORT` to use another port, for example `LHCI_PORT=3101 pnpm verify`.
-
-Run unit tests:
-
-```bash
-pnpm test
-```
-
-Start Storybook locally:
-
-```bash
-pnpm storybook
-```
-
-Build Storybook statically:
-
-```bash
-pnpm build-storybook
-```
-
-Build the production app:
-
-```bash
-pnpm build
-```
-
-Start the production server after a build:
-
-```bash
-pnpm start
-```
-
-The app runs at `http://localhost:3000` by default.
-
-If pnpm is not installed locally, install it first with your preferred Node package manager.
-
-See [DESIGN.md](DESIGN.md) for the implemented architecture and its invariants.
-
-## Production Deployment
-
-The app can be deployed as a containerized Next.js standalone service. `next.config.ts` enables `output: "standalone"`, and the production image runs the generated `server.js` process on port `3000`.
-
-The repository keeps deployment configuration generic by reading environment-specific container and runtime settings from the deployment environment instead of committing infrastructure details.
-
-The production Compose file is `docker-compose.prod.yml`. It expects the deployment environment to provide the container image reference and any external network name required by the target platform.
-
-## Deployment Pipeline
-
-GitHub Actions runs the canonical repository validation command for pushes and pull requests targeting `main`:
-
-```bash
-pnpm verify
-```
-
-On pushes to main, the deployment workflow then:
-
-- Builds the Docker image.
-- Publishes versioned image tags to the configured container registry.
-- Synchronizes the generic deployment files to the target environment.
-- Refreshes the environment-specific runtime values on the target environment.
-- Pulls the latest image and restarts the application service.
-
-The deployment workflow uses repository secrets and variables for credentials, target access, image naming, and environment-specific runtime values. No infrastructure endpoints or environment-specific values are stored in the repository.
-
-## Autonomous Milestone Delivery
-
-An opt-in OpenCode milestone autopilot can implement GitHub issues serially, review and test each PR, and integrate successful changes into a dedicated milestone branch. A final draft release PR remains subject to human review before `main` and production deployment are changed.
-
-See [Autonomous Milestone Delivery](docs/AUTOPILOT.md) for credentials, startup, limits, and safety precautions.
-
-## Dependency Updates
-
-Dependabot is configured in `.github/dependabot.yml` to open weekly pull requests for:
-
-- pnpm dependencies from `package.json` and `pnpm-lock.yaml`.
-- GitHub Actions used by the CI and deployment workflow.
-- Docker base image updates for the production image.
-
-Dependency updates are grouped for Next.js, React, Storybook, and tooling packages to keep pull requests reviewable. Dependabot pull requests run the normal quality pipeline and are merged manually.
-
-## Useful Routes
+## Supported Routes
 
 - `/`
 - `/products`
 - `/products?page=2`
 - `/products?q=mascara&category=beauty&sort=price-asc`
-- `/products?q=mascara&category=beauty&sort=price-asc&page=2`
+- `/products?brand=Essence&priceMin=10&priceMax=50`
 - `/products/essence-mascara-lash-princess-1`
+- `/compare`
+
+## Architecture Summary
+
+Route pages and data-reading components are Server Components. Client Components are limited to URL controls, comparison selection, and browser navigation. Listing state is URL-driven through `q`, `brand`, `category`, `priceMin`, `priceMax`, `sort`, and `page`.
+
+Product data is loaded in `src/lib/products-api.ts` from DummyJSON, mapped into the internal `Product` type, cached with ISR, and replaced by the local catalog in `src/data/products.ts` when the external API fails. UI code never depends on DummyJSON response types.
+
+Read [Application architecture](docs/architecture.md) and [Product data and caching](docs/product-data.md) for the full design. Architectural changes must update [`DESIGN.md`](DESIGN.md).
+
+## Deployment Summary
+
+The production image uses Next.js standalone output and a multi-stage Docker build. `docker-compose.prod.yml` expects the container image and external network name from the deployment environment. The `CI` workflow validates pushes and pull requests to `main` and `milestone/**`; on pushes to `main`, the deploy job publishes the image and restarts the production service.
+
+Environment-specific endpoints, credentials, and runtime values are not stored in the repository. See [Deployment](docs/deployment.md) for the pipeline overview.
+
+## Automation and Dependency Updates
+
+- **CI:** the `Quality checks` job runs the autopilot safety suite and `pnpm verify`.
+- **Milestone Autopilot:** an opt-in workflow that implements milestone issues serially into `milestone/<number>` and leaves the final release pull request for human review. It never merges into `main`.
+- **AI code review:** the `OpenAI Code Review` workflow reviews same-repository `autopilot/issue-*` pull requests, posts a SHA-bound comment with a verdict, and gates autopilot integration alongside `Quality checks`.
+- **Dependabot:** weekly updates for npm dependencies, GitHub Actions, and Docker. Only a narrow class of direct development-dependency patch updates is auto-merged after required `Quality checks` protection is confirmed.
+
+See [Milestone Autopilot](docs/milestone-autopilot.md), [AI code review](docs/ai-code-review.md), and [Contributing and quality](docs/contributing.md) for details.
+
+## Contributing
+
+Make the smallest coherent change, preserve the boundaries in `DESIGN.md`, write repository content in English, and run `pnpm check` (or `pnpm verify` for the full gate). Do not add dependencies without a clear architectural reason.
+
+See [Contributing and quality](docs/contributing.md) for CI, Dependabot, and pull request expectations.
 
 ## Possible Version 2 Improvements
 
 - Add infinite loading or cursor-based pagination
-- Add multi-select facets such as brand, color, material, and sale status
+- Add additional facets such as color, material, and sale status
 - Add Playwright smoke tests for listing and detail routes
 - Add component tests for product cards and filter controls
 - Add route-level metadata and structured data for product details
 - Move from the demo product API to a dedicated headless commerce adapter
-- Add compare, wishlist, or recently viewed interactions
+- Add wishlist or recently viewed interactions

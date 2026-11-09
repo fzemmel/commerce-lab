@@ -40,7 +40,7 @@ pnpm check
 pnpm verify
 ```
 
-`pnpm check` runs linting, type checking, and unit tests. `pnpm verify` additionally runs the production build, static Storybook build, and Lighthouse CI.
+`pnpm check` runs linting, type checking, and unit tests. `pnpm verify` additionally runs the VitePress documentation build, the production build, static Storybook build, and Lighthouse CI. Use `pnpm docs:dev` to preview the documentation site in `docs/`.
 
 ## Definition of Done
 
