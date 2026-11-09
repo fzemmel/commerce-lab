@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { ComparisonProductImage } from "@/components/comparison/comparison-product-image";
 import { normalizeComparisonRows } from "@/lib/comparison";
 import type { Product } from "@/types/product";
 
@@ -19,6 +20,7 @@ export function ComparisonTable({ products, onRemove }: ComparisonTableProps) {
             <th scope="col" className="min-w-36 px-5 py-4 font-semibold text-slate-950">Attribute</th>
             {products.map((product) => (
               <th key={product.id} scope="col" className="min-w-52 px-5 py-4 align-top font-semibold text-slate-950">
+                <ComparisonProductImage product={product} className="mb-4" />
                 <Link href={`/products/${product.slug}`} className="transition hover:text-amber-800">{product.name}</Link>
                 <button
                   type="button"
