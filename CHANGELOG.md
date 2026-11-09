@@ -6,15 +6,42 @@ This changelog includes the private pre-release development history of the proje
 
 ## Unreleased
 
+## 1.1.0 - 2026-11-09
+
+### Added
+
+- Added searchable multi-select brand and category filters with option search, selected counts, and per-facet clearing.
+- Added a catalog-bounded dual-thumb price range slider with logarithmic positioning and keyboard support.
+- Added product images, responsive sizing, and fallback handling to the comparison view.
+- Added a VitePress documentation site with navigation, local search, and dedicated pages for setup, architecture, product discovery, data, deployment, automation, and review.
+- Added `docs:dev`, `docs:build`, and `docs:preview` commands and included the documentation build in `pnpm verify` and CI.
+- Added a guarded Dependabot auto-merge workflow for direct development-dependency patch updates.
+- Added tests and Storybook stories for the reworked filters, price range, comparison states, and responsive layouts.
+- Added an OpenCode OAuth preflight and documented the persistent runner setup and isolation requirements.
+- Added grouped plan and review logs and full frozen-install verification for dependency metadata changes.
+
 ### Changed
 
 - Switched milestone planning and implementation from an Anthropic API key to ChatGPT/Codex OAuth on a dedicated self-hosted runner.
 - Switched milestone pull request reviews from the Mistral API to the runner's ChatGPT/Codex OAuth session.
 - Restricted OAuth-backed reviews to internal autopilot pull requests and pre-provisioned OpenCode on the dedicated runner.
-- Added an OpenCode OAuth preflight and documented the persistent runner setup and isolation requirements.
 - Relaxed milestone guardrails so dependency, architecture and application configuration changes can be tested on disposable integration branches while workflow, credential and deployment infrastructure remains protected.
 - Replaced the three-pass plan approval loop with one blocker-focused revision opportunity and non-blocking implementation notes.
-- Added grouped plan/review logs and full frozen-install verification for dependency metadata changes.
+- Normalized brand, category, and price query state while keeping all product discovery state URL-driven.
+- Updated Next.js to 16.4.2, React to 19.3.1, and refreshed Storybook, Tailwind CSS, TypeScript, Vitest, Lighthouse CI, and supporting development dependencies.
+- Moved Lighthouse validation to `127.0.0.1:3100` by default and added the `LHCI_PORT` override.
+- Expanded repository documentation and linked the documentation site from the README.
+
+### Fixed
+
+- Fixed Dependabot auto-merge validation to read the actual strict status-check field.
+- Restored the OpenAI review workflow and retried incomplete automated plan reviews.
+- Fixed price formatting to support configurable decimal precision for the range slider.
+
+### Security
+
+- Resolved known audit findings in transitive dependencies with targeted pnpm overrides.
+- Kept production deployment and release merges behind explicit human approval.
 
 ## 1.0.2 - 2026-10-18
 
