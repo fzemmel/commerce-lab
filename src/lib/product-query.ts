@@ -1,3 +1,4 @@
+import { countDecimalPlaces } from "@/lib/decimal";
 import type { Product, ProductCategory } from "@/types/product";
 
 export type ProductSort = "name-asc" | "price-asc" | "price-desc" | "rating-desc";
@@ -7,6 +8,12 @@ export const PRODUCTS_PER_PAGE = 24;
 export type PriceRange = {
   min?: number;
   max?: number;
+};
+
+export type PriceBounds = {
+  min: number;
+  max: number;
+  step: number;
 };
 
 export type ProductQuery = {
@@ -88,6 +95,48 @@ export function parsePriceRange(minValue: SearchParamValue | number, maxValue: S
   };
 }
 
+export type NormalizedPriceRange = {
+  /** Range clamped to the catalog bounds for the slider. Undefined when the request lies entirely outside the catalog. */
+  display: PriceRange | undefined;
+  /** Whether one or both requested bounds fall outside the catalog bounds. */
+  outOfBounds: boolean;
+};
+
+export function normalizePriceRange(price: PriceRange | undefined, bounds: PriceBounds): NormalizedPriceRange {
+  if (!price) {
+    return { display: undefined, outOfBounds: false };
+  }
+
+  if (bounds.max <= bounds.min) {
+    return { display: undefined, outOfBounds: true };
+  }
+
+  const { min, max } = price;
+
+  if (min !== undefined && max !== undefined && min > max) {
+    return { display: undefined, outOfBounds: false };
+  }
+
+  const belowCatalog = max !== undefined && max < bounds.min;
+  const aboveCatalog = min !== undefined && min > bounds.max;
+
+  if (belowCatalog || aboveCatalog) {
+    return { display: undefined, outOfBounds: true };
+  }
+
+  const displayMin = min === undefined ? undefined : Math.max(min, bounds.min);
+  const displayMax = max === undefined ? undefined : Math.min(max, bounds.max);
+  const outOfBounds = (min !== undefined && min < bounds.min) || (max !== undefined && max > bounds.max);
+
+  return {
+    display: {
+      ...(displayMin !== undefined ? { min: displayMin } : {}),
+      ...(displayMax !== undefined ? { max: displayMax } : {}),
+    },
+    outOfBounds,
+  };
+}
+
 export function formatCategoryLabel(category: ProductCategory) {
   return category
     .split(/[-_\s]+/)
@@ -163,6 +212,32 @@ export function applyProductQueryToSearchParams(searchParams: Pick<URLSearchPara
   return params;
 }
 
+export function getPriceBounds(catalog: Product[]): PriceBounds {
+  let minimum = Number.POSITIVE_INFINITY;
+  let maximum = Number.NEGATIVE_INFINITY;
+  let maximumDecimalPlaces = 0;
+
+  for (const product of catalog) {
+    if (!Number.isFinite(product.price)) {
+      continue;
+    }
+
+    minimum = Math.min(minimum, product.price);
+    maximum = Math.max(maximum, product.price);
+    maximumDecimalPlaces = Math.max(maximumDecimalPlaces, countDecimalPlaces(product.price));
+  }
+
+  if (minimum === Number.POSITIVE_INFINITY) {
+    return { min: 0, max: 0, step: 1 };
+  }
+
+  return {
+    min: minimum,
+    max: maximum,
+    step: 10 ** -maximumDecimalPlaces,
+  };
+}
+
 export function getCategoryOptions(catalog: Product[]) {
   return [...new Set(catalog.map((product) => product.category))]
     .toSorted((a, b) => formatCategoryLabel(a).localeCompare(formatCategoryLabel(b)))
@@ -181,7 +256,10 @@ export function getProductBySlug(slug: string, catalog: Product[]) {
 
 export function queryProducts(query: ProductQuery, catalog: Product[]) {
   const search = query.q.toLowerCase();
-  const price = parsePriceRange(query.price?.min, query.price?.max);
+  const requestedPrice = parsePriceRange(query.price?.min, query.price?.max);
+  const priceBounds = requestedPrice ? getPriceBounds(catalog) : undefined;
+  const price =
+    requestedPrice && priceBounds ? (normalizePriceRange(requestedPrice, priceBounds).display ?? requestedPrice) : requestedPrice;
 
   return catalog
     .filter((product) => {

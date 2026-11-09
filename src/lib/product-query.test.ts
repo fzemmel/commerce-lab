@@ -5,7 +5,9 @@ import {
   formatCategoryLabel,
   getBrandOptions,
   getCategoryOptions,
+  getPriceBounds,
   getProductBySlug,
+  normalizePriceRange,
   paginateProducts,
   parseProductQuery,
   queryProducts,
@@ -123,6 +125,16 @@ describe("product query serialization", () => {
     expect(serializeProductQuery({ ...defaultQuery, price: { min: 120, max: 50 } }).toString()).toBe("");
   });
 
+  it("parses and serializes decimal price bounds", () => {
+    expect(parseProductQuery({ priceMin: "39.99", priceMax: "129.5" })).toEqual({
+      ...defaultQuery,
+      price: { min: 39.99, max: 129.5 },
+    });
+    expect(
+      serializeProductQuery({ ...defaultQuery, price: { min: 39.99, max: 129.5 } }).toString(),
+    ).toBe("priceMin=39.99&priceMax=129.5");
+  });
+
   it("preserves unrelated parameters while replacing known query values", () => {
     const params = applyProductQueryToSearchParams(new URLSearchParams("ref=campaign&brand=unknown&priceMin=10&priceMax=20&page=8"), {
       ...defaultQuery,
@@ -131,6 +143,45 @@ describe("product query serialization", () => {
     });
 
     expect(params.toString()).toBe("ref=campaign&brand=Northline&priceMin=50&priceMax=120");
+  });
+});
+
+describe("normalizePriceRange", () => {
+  const bounds = { min: 40, max: 200, step: 1 };
+
+  it("returns no display range when no price is requested", () => {
+    expect(normalizePriceRange(undefined, bounds)).toEqual({ display: undefined, outOfBounds: false });
+  });
+
+  it("keeps ranges inside the catalog bounds", () => {
+    expect(normalizePriceRange({ min: 50, max: 120 }, bounds)).toEqual({
+      display: { min: 50, max: 120 },
+      outOfBounds: false,
+    });
+  });
+
+  it("clamps partially out-of-range bounds and flags them", () => {
+    expect(normalizePriceRange({ min: 10, max: 250 }, bounds)).toEqual({
+      display: { min: 40, max: 200 },
+      outOfBounds: true,
+    });
+    expect(normalizePriceRange({ min: 10 }, bounds)).toEqual({
+      display: { min: 40 },
+      outOfBounds: true,
+    });
+  });
+
+  it("does not clamp ranges that lie entirely outside the catalog", () => {
+    expect(normalizePriceRange({ min: 500 }, bounds)).toEqual({ display: undefined, outOfBounds: true });
+    expect(normalizePriceRange({ max: 10 }, bounds)).toEqual({ display: undefined, outOfBounds: true });
+  });
+
+  it("ignores reversed ranges and collapsed catalog bounds", () => {
+    expect(normalizePriceRange({ min: 200, max: 50 }, bounds)).toEqual({ display: undefined, outOfBounds: false });
+    expect(normalizePriceRange({ min: 10 }, { min: 40, max: 40, step: 1 })).toEqual({
+      display: undefined,
+      outOfBounds: true,
+    });
   });
 });
 
@@ -165,12 +216,37 @@ describe("queryProducts", () => {
     expect(queryProducts({ ...defaultQuery, price: { min: 50, max: 120 } }, catalog).map((product) => product.slug)).toEqual(["alpha-shirt", "bravo-runner"]);
   });
 
+  it("preserves out-of-catalog price bounds for filtering instead of clamping them to the catalog", () => {
+    expect(queryProducts({ ...defaultQuery, price: { min: 500 } }, catalog)).toEqual([]);
+    expect(queryProducts({ ...defaultQuery, price: { max: 10 } }, catalog)).toEqual([]);
+  });
+
   it("sorts by name ascending by default and does not mutate the catalog", () => {
     const originalOrder = catalog.map((product) => product.slug);
 
     expect(queryProducts(defaultQuery, catalog).map((product) => product.slug)).toEqual(["alpha-shirt", "bravo-runner", "carry-tote"]);
     queryProducts({ ...defaultQuery, sort: "price-asc" }, catalog);
     expect(catalog.map((product) => product.slug)).toEqual(originalOrder);
+  });
+});
+
+describe("getPriceBounds", () => {
+  it("derives exact minimum and maximum prices with an integer step", () => {
+    expect(getPriceBounds(catalog)).toEqual({ min: 40, max: 120, step: 1 });
+  });
+
+  it("uses a decimal step that matches the catalog precision", () => {
+    const decimalCatalog = catalog.map((product, index) => ({
+      ...product,
+      price: [39.99, 129.5, 98.995][index] ?? product.price,
+    }));
+
+    expect(getPriceBounds(decimalCatalog)).toEqual({ min: 39.99, max: 129.5, step: 0.001 });
+    expect(getPriceBounds(decimalCatalog.slice(0, 2))).toEqual({ min: 39.99, max: 129.5, step: 0.01 });
+  });
+
+  it("returns a safe zero range for an empty catalog", () => {
+    expect(getPriceBounds([])).toEqual({ min: 0, max: 0, step: 1 });
   });
 });
 

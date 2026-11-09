@@ -7,4 +7,9 @@ describe("formatPrice", () => {
     expect(formatPrice(39)).toBe("€39");
     expect(formatPrice(129.49)).toBe("€129");
   });
+
+  it("supports fractional digits for decimal price bounds", () => {
+    expect(formatPrice(39.99, 2)).toBe("€39.99");
+    expect(formatPrice(129.5, 2)).toBe("€129.50");
+  });
 });
