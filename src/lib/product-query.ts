@@ -9,6 +9,12 @@ export type PriceRange = {
   max?: number;
 };
 
+export type PriceBounds = {
+  min: number;
+  max: number;
+  step: number;
+};
+
 export type ProductQuery = {
   q: string;
   brands: string[];
@@ -161,6 +167,40 @@ export function applyProductQueryToSearchParams(searchParams: Pick<URLSearchPara
   serializeProductQuery(query).forEach((value, key) => params.set(key, value));
 
   return params;
+}
+
+function countDecimalPlaces(value: number) {
+  const [coefficient, exponentText] = Math.abs(value).toString().toLowerCase().split("e");
+  const fractionDigits = coefficient.split(".")[1]?.length ?? 0;
+  const exponent = exponentText ? Number.parseInt(exponentText, 10) : 0;
+
+  return Math.max(0, fractionDigits - exponent);
+}
+
+export function getPriceBounds(catalog: Product[]): PriceBounds {
+  let minimum = Number.POSITIVE_INFINITY;
+  let maximum = Number.NEGATIVE_INFINITY;
+  let maximumDecimalPlaces = 0;
+
+  for (const product of catalog) {
+    if (!Number.isFinite(product.price)) {
+      continue;
+    }
+
+    minimum = Math.min(minimum, product.price);
+    maximum = Math.max(maximum, product.price);
+    maximumDecimalPlaces = Math.max(maximumDecimalPlaces, countDecimalPlaces(product.price));
+  }
+
+  if (minimum === Number.POSITIVE_INFINITY) {
+    return { min: 0, max: 0, step: 1 };
+  }
+
+  return {
+    min: minimum,
+    max: maximum,
+    step: 10 ** -maximumDecimalPlaces,
+  };
 }
 
 export function getCategoryOptions(catalog: Product[]) {

@@ -5,6 +5,7 @@ import {
   formatCategoryLabel,
   getBrandOptions,
   getCategoryOptions,
+  getPriceBounds,
   getProductBySlug,
   paginateProducts,
   parseProductQuery,
@@ -123,6 +124,16 @@ describe("product query serialization", () => {
     expect(serializeProductQuery({ ...defaultQuery, price: { min: 120, max: 50 } }).toString()).toBe("");
   });
 
+  it("parses and serializes decimal price bounds", () => {
+    expect(parseProductQuery({ priceMin: "39.99", priceMax: "129.5" })).toEqual({
+      ...defaultQuery,
+      price: { min: 39.99, max: 129.5 },
+    });
+    expect(
+      serializeProductQuery({ ...defaultQuery, price: { min: 39.99, max: 129.5 } }).toString(),
+    ).toBe("priceMin=39.99&priceMax=129.5");
+  });
+
   it("preserves unrelated parameters while replacing known query values", () => {
     const params = applyProductQueryToSearchParams(new URLSearchParams("ref=campaign&brand=unknown&priceMin=10&priceMax=20&page=8"), {
       ...defaultQuery,
@@ -171,6 +182,26 @@ describe("queryProducts", () => {
     expect(queryProducts(defaultQuery, catalog).map((product) => product.slug)).toEqual(["alpha-shirt", "bravo-runner", "carry-tote"]);
     queryProducts({ ...defaultQuery, sort: "price-asc" }, catalog);
     expect(catalog.map((product) => product.slug)).toEqual(originalOrder);
+  });
+});
+
+describe("getPriceBounds", () => {
+  it("derives exact minimum and maximum prices with an integer step", () => {
+    expect(getPriceBounds(catalog)).toEqual({ min: 40, max: 120, step: 1 });
+  });
+
+  it("uses a decimal step that matches the catalog precision", () => {
+    const decimalCatalog = catalog.map((product, index) => ({
+      ...product,
+      price: [39.99, 129.5, 98.995][index] ?? product.price,
+    }));
+
+    expect(getPriceBounds(decimalCatalog)).toEqual({ min: 39.99, max: 129.5, step: 0.001 });
+    expect(getPriceBounds(decimalCatalog.slice(0, 2))).toEqual({ min: 39.99, max: 129.5, step: 0.01 });
+  });
+
+  it("returns a safe zero range for an empty catalog", () => {
+    expect(getPriceBounds([])).toEqual({ min: 0, max: 0, step: 1 });
   });
 });
 

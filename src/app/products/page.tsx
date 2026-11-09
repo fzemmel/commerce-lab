@@ -5,7 +5,15 @@ import { ProductFilters } from "@/components/filters/product-filters";
 import { ProductGrid } from "@/components/product/product-grid";
 import { ProductPagination } from "@/components/product/product-pagination";
 import { buttonVariants } from "@/components/ui/button";
-import { getBrandOptions, getCategoryOptions, paginateProducts, parseProductQuery, queryProducts, type ProductSearchParams } from "@/lib/product-query";
+import {
+  getBrandOptions,
+  getCategoryOptions,
+  getPriceBounds,
+  paginateProducts,
+  parseProductQuery,
+  queryProducts,
+  type ProductSearchParams,
+} from "@/lib/product-query";
 import { getProductCatalog } from "@/lib/products-api";
 
 type ProductsPageProps = {
@@ -17,6 +25,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   const rawSearchParams = await searchParams;
   const brandOptions = getBrandOptions(catalog.products);
   const categoryOptions = getCategoryOptions(catalog.products);
+  const priceBounds = getPriceBounds(catalog.products);
   const query = parseProductQuery(
     rawSearchParams,
     brandOptions.map((option) => option.value),
@@ -39,7 +48,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
       </section>
 
       <Suspense fallback={<FilterSkeleton />}>
-        <ProductFilters query={query} brandOptions={brandOptions} categoryOptions={categoryOptions} />
+        <ProductFilters query={query} brandOptions={brandOptions} categoryOptions={categoryOptions} priceBounds={priceBounds} />
       </Suspense>
 
       {catalog.source === "fallback" ? (

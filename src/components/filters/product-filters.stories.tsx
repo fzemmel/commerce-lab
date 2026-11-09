@@ -27,6 +27,7 @@ const meta = {
       { value: "footwear", label: "Footwear" },
       { value: "accessories", label: "Accessories" },
     ],
+    priceBounds: { min: 38, max: 189, step: 1 },
     query: { q: "", brands: [], categories: [], sort: "name-asc", page: 1 },
   },
 } satisfies Meta<typeof ProductFilters>;
@@ -160,18 +161,50 @@ export const NarrowViewportSelected: Story = {
   },
 };
 
+export const PriceRangeMinimumOnly: Story = {
+  args: {
+    query: { q: "", brands: [], categories: [], price: { min: 50 }, sort: "name-asc", page: 1 },
+  },
+};
+
+export const PriceRangeMaximumOnly: Story = {
+  args: {
+    query: { q: "", brands: [], categories: [], price: { max: 120 }, sort: "name-asc", page: 1 },
+  },
+};
+
 export const PriceRangeSelected: Story = {
   args: {
     query: { q: "", brands: [], categories: [], price: { min: 50, max: 120 }, sort: "name-asc", page: 1 },
   },
 };
 
-export const InvalidPriceRange: Story = {
+export const PriceRangeKeyboard: Story = {
   play: async ({ canvas, userEvent }) => {
-    await userEvent.type(canvas.getByLabelText("Minimum price"), "120");
-    await userEvent.type(canvas.getByLabelText("Maximum price"), "50");
-    await userEvent.click(canvas.getByRole("button", { name: "Apply" }));
+    const minimum = canvas.getByRole("slider", { name: "Minimum price" });
+    const maximum = canvas.getByRole("slider", { name: "Maximum price" });
 
-    await expect(canvas.getByRole("alert")).toHaveTextContent("Minimum price cannot be greater than maximum price.");
+    minimum.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    maximum.focus();
+    await userEvent.keyboard("{ArrowLeft}");
+
+    await expect(canvas.getByText("€39 to €188")).toBeVisible();
+  },
+};
+
+export const PriceRangeNarrowViewport: Story = {
+  decorators: narrowViewportDecorator,
+  args: {
+    query: { q: "", brands: [], categories: [], price: { min: 50, max: 120 }, sort: "name-asc", page: 1 },
+  },
+  play: async ({ canvas }) => {
+    const minimum = canvas.getByRole("slider", { name: "Minimum price" });
+    const maximum = canvas.getByRole("slider", { name: "Maximum price" });
+
+    await expect(minimum).toBeVisible();
+    await expect(maximum).toBeVisible();
+    await expect(canvas.getByText("Catalog prices €38 to €189")).toBeVisible();
+    await expect(canvas.getByText("€50 to €120")).toBeVisible();
   },
 };

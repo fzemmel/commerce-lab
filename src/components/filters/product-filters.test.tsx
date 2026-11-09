@@ -29,6 +29,7 @@ const options = {
     { value: "apparel", label: "Apparel" },
     { value: "footwear", label: "Footwear" },
   ],
+  priceBounds: { min: 40, max: 200, step: 1 },
 };
 
 function renderFilters(query: ProductQuery) {
@@ -522,51 +523,138 @@ describe("ProductFilters", () => {
     const user = userEvent.setup();
     renderFilters({ q: "shirt", brands: [], categories: [], sort: "price-desc", page: 3 });
 
-    await user.type(screen.getByLabelText("Minimum price"), "50");
+    fireEvent.change(screen.getByRole("slider", { name: "Minimum price" }), { target: { value: "50" } });
     await user.click(screen.getByRole("button", { name: "Apply" }));
 
     expect(replace).toHaveBeenCalledWith("/products?ref=campaign&q=shirt&priceMin=50&sort=price-desc", { scroll: false });
+  });
+
+  it("applies a maximum price while retaining other query state and resetting pagination", async () => {
+    const user = userEvent.setup();
+    renderFilters({ q: "shirt", brands: [], categories: [], sort: "price-desc", page: 3 });
+
+    fireEvent.change(screen.getByRole("slider", { name: "Maximum price" }), { target: { value: "100" } });
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(replace).toHaveBeenCalledWith("/products?ref=campaign&q=shirt&priceMax=100&sort=price-desc", { scroll: false });
   });
 
   it("applies both price bounds and resets pagination", async () => {
     const user = userEvent.setup();
     renderFilters({ q: "shirt", brands: [], categories: [], sort: "price-desc", page: 3 });
 
-    await user.type(screen.getByLabelText("Minimum price"), "50");
-    await user.type(screen.getByLabelText("Maximum price"), "120");
+    fireEvent.change(screen.getByRole("slider", { name: "Minimum price" }), { target: { value: "50" } });
+    fireEvent.change(screen.getByRole("slider", { name: "Maximum price" }), { target: { value: "120" } });
     await user.click(screen.getByRole("button", { name: "Apply" }));
 
     expect(replace).toHaveBeenCalledWith("/products?ref=campaign&q=shirt&priceMin=50&priceMax=120&sort=price-desc", { scroll: false });
   });
 
-  it("clears both price bounds while retaining other active filters", async () => {
+  it("moves both handles with the keyboard and applies the resulting range", async () => {
+    const user = userEvent.setup();
+    renderFilters({ q: "shirt", brands: [], categories: [], sort: "price-desc", page: 3 });
+    const minimum = screen.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement;
+    const maximum = screen.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement;
+
+    minimum.focus();
+    expect(document.activeElement).toBe(minimum);
+    await user.keyboard("{ArrowRight}");
+    expect(minimum.value).toBe("41");
+
+    maximum.focus();
+    expect(document.activeElement).toBe(maximum);
+    await user.keyboard("{ArrowLeft}");
+    expect(maximum.value).toBe("199");
+
+    expect(screen.getByText("€41 to €199")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(replace).toHaveBeenCalledWith(
+      "/products?ref=campaign&q=shirt&priceMin=41&priceMax=199&sort=price-desc",
+      { scroll: false },
+    );
+  });
+
+  it("clamps each handle so the minimum cannot exceed the maximum", async () => {
+    const user = userEvent.setup();
+    currentSearchParams = "q=shirt&priceMin=50&priceMax=120&sort=price-desc&page=3&ref=campaign";
+    renderFilters({ q: "shirt", brands: [], categories: [], price: { min: 50, max: 120 }, sort: "price-desc", page: 3 });
+    const minimum = screen.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement;
+    const maximum = screen.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement;
+
+    fireEvent.change(minimum, { target: { value: "250" } });
+    expect(minimum.value).toBe("120");
+    expect(screen.getByText("€120 to €120")).toBeTruthy();
+
+    fireEvent.change(maximum, { target: { value: "10" } });
+    expect(maximum.value).toBe("120");
+    expect(screen.getByText("€120 to €120")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(replace).toHaveBeenCalledWith(
+      "/products?ref=campaign&q=shirt&priceMin=120&priceMax=120&sort=price-desc",
+      { scroll: false },
+    );
+  });
+
+  it("clears both price bounds, resets the handles, and retains other active filters", async () => {
     const user = userEvent.setup();
     currentSearchParams = "q=shirt&brand=Northline&priceMin=50&priceMax=120&sort=price-desc&page=3&ref=campaign";
     renderFilters({ q: "shirt", brands: ["Northline"], categories: [], price: { min: 50, max: 120 }, sort: "price-desc", page: 3 });
+    const priceRange = within(screen.getByRole("group", { name: "Price range" }));
 
-    await user.click(within(screen.getByRole("group", { name: "Price range" })).getByRole("button", { name: "Clear" }));
+    await user.click(priceRange.getByRole("button", { name: "Clear" }));
 
     expect(replace).toHaveBeenCalledWith("/products?ref=campaign&q=shirt&brand=Northline&sort=price-desc", { scroll: false });
+    expect((priceRange.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement).value).toBe("40");
+    expect((priceRange.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement).value).toBe("200");
+    expect(priceRange.getByText("€40 to €200")).toBeTruthy();
   });
 
-  it("shows a validation error and does not navigate for reversed price bounds", async () => {
-    const user = userEvent.setup();
-    renderFilters({ q: "shirt", brands: [], categories: [], sort: "price-desc", page: 3 });
+  it("exposes catalog limits, current values, and touch-sized controls for narrow viewports", () => {
+    renderFilters({ q: "", brands: [], categories: [], sort: "name-asc", page: 1 });
+    const priceRange = within(screen.getByRole("group", { name: "Price range" }));
+    const minimum = priceRange.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement;
+    const maximum = priceRange.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement;
+    const sliderRow = minimum.parentElement as HTMLElement;
 
-    await user.type(screen.getByLabelText("Minimum price"), "120");
-    await user.type(screen.getByLabelText("Maximum price"), "50");
-    await user.click(screen.getByRole("button", { name: "Apply" }));
+    expect(minimum.getAttribute("min")).toBe("40");
+    expect(minimum.getAttribute("max")).toBe("200");
+    expect(minimum.getAttribute("step")).toBe("1");
+    expect(maximum.getAttribute("min")).toBe("40");
+    expect(maximum.getAttribute("max")).toBe("200");
+    expect(minimum.getAttribute("aria-valuetext")).toBe("€40, minimum price");
+    expect(maximum.getAttribute("aria-valuetext")).toBe("€200, maximum price");
+    expect(minimum.getAttribute("aria-describedby")).toContain("price-range-help");
+    expect(minimum.getAttribute("aria-describedby")).toContain("price-range-summary");
 
-    expect(screen.getByRole("alert").textContent).toBe("Minimum price cannot be greater than maximum price.");
-    expect(replace).not.toHaveBeenCalled();
+    expect(minimum.className).toContain("h-11");
+    expect(minimum.className).toContain("w-full");
+    expect(sliderRow.className).toContain("h-11");
+    expect(sliderRow.className).toContain("w-full");
+    expect(sliderRow.className).toContain("min-w-0");
+    expect(screen.getByText("€40 to €200").getAttribute("aria-live")).toBe("polite");
+    expect(priceRange.getByText("Catalog prices €40 to €200")).toBeTruthy();
   });
 
-  it("synchronizes price inputs when URL-derived query props change", () => {
+  it("disables the handles when the catalog has no price range", () => {
+    render(<ProductFilters query={{ q: "", brands: [], categories: [], sort: "name-asc", page: 1 }} {...options} priceBounds={{ min: 0, max: 0, step: 1 }} />);
+    const priceRange = within(screen.getByRole("group", { name: "Price range" }));
+
+    expect((priceRange.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement).disabled).toBe(true);
+    expect((priceRange.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement).disabled).toBe(true);
+    expect((priceRange.getByRole("button", { name: "Apply" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(priceRange.getByText("Price filter unavailable")).toBeTruthy();
+  });
+
+  it("synchronizes price handles when URL-derived query props change", () => {
     const { rerender } = renderFilters({ q: "", brands: [], categories: [], price: { min: 50 }, sort: "name-asc", page: 1 });
 
     rerender(<ProductFilters query={{ q: "", brands: [], categories: [], price: { min: 100, max: 200 }, sort: "name-asc", page: 1 }} {...options} />);
 
-    expect((screen.getByLabelText("Minimum price") as HTMLInputElement).value).toBe("100");
-    expect((screen.getByLabelText("Maximum price") as HTMLInputElement).value).toBe("200");
+    expect((screen.getByRole("slider", { name: "Minimum price" }) as HTMLInputElement).value).toBe("100");
+    expect((screen.getByRole("slider", { name: "Maximum price" }) as HTMLInputElement).value).toBe("200");
   });
 });
