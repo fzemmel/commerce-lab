@@ -5,7 +5,7 @@ description: Overview of the opt-in GitHub Actions workflow that delivers a mile
 
 # Milestone Autopilot
 
-The Milestone Autopilot is an **opt-in** GitHub Actions workflow that implements a GitHub milestone issue by issue, validates each change, and integrates successful work into a milestone branch. It never merges into `main` and never deploys to production.
+The Milestone Autopilot is an **opt-in** GitHub Actions workflow that implements a GitHub milestone issue by issue, validates each change, and integrates successful work into a milestone branch. It never merges into `main` automatically; it only opens a draft release pull request for human review. It never deploys to production.
 
 The complete operational reference is [Autopilot Reference](/AUTOPILOT) (`docs/AUTOPILOT.md`). This page is a concise overview of what the automation does and where human control remains.
 
@@ -71,7 +71,7 @@ An issue is eligible only when it is not blocked:
 - Only a valid independent AI verdict for the exact current head SHA and a passing `Quality checks` run can authorize an integration merge.
 - Malformed verdicts, stale SHA approvals, failed CI, unsafe files, or exceeded fix attempts fail closed and require manual intervention.
 - There is a fixed maximum of three correction attempts.
-- The workflow never targets `main` automatically and never triggers production deployment.
+- The workflow never merges into `main` automatically. It only opens a draft release pull request targeting `main` for human review, and it never triggers production deployment.
 
 ## Failure recovery
 
@@ -85,7 +85,7 @@ Closed and already integrated issues are detected from GitHub state, so a re-run
 
 ## Human review is required
 
-The final draft release pull request is never merged automatically. A human maintainer must review the integrated milestone, confirm that CI and the AI review results are acceptable, and merge it. Only that merge to `main` can trigger the production deployment. Green CI and an AI approval are evidence, not proof that the change is free of functional, security, or architectural defects.
+The final draft release pull request is never merged automatically. A human maintainer must review the integrated milestone, confirm that CI and the AI review results are acceptable, and merge it. Any push or merge to `main` triggers the production deployment, including the merge of the release pull request. Green CI and an AI approval are evidence, not proof that the change is free of functional, security, or architectural defects.
 
 ## Local safety tests
 

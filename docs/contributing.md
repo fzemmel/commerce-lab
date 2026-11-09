@@ -48,7 +48,7 @@ The `CI` GitHub Actions workflow is defined in `.github/workflows/ci.yml`.
 
 - It runs for pushes and pull requests targeting `main` and `milestone/**`.
 - The `Quality checks` job installs with `pnpm install --frozen-lockfile`, runs the autopilot safety suite, and runs `pnpm verify`.
-- Lighthouse reports are uploaded as a workflow artifact even when the job fails.
+- The workflow attempts to upload Lighthouse reports as an artifact even when the job fails; no artifact is produced if report collection never ran.
 - The `deploy` job runs only for pushes to `main`, after `Quality checks` succeeds.
 
 `Quality checks` is the required status context used by the automation and by branch protection.

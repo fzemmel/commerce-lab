@@ -51,7 +51,7 @@ The response is revalidated hourly. The request is aborted after five seconds so
 | `description` | `description` | Passed through. |
 | `price` | `price` | Passed through. |
 | `discountPercentage` | `originalPrice`, `isSale` | Original price is derived when the discount is between 0 and 100. |
-| `thumbnail` / `images` | `image`, `images` | Thumbnail first, then additional images, deduplicated by filtering empty values. |
+| `thumbnail` / `images` | `image`, `images` | Thumbnail first, then additional images, with empty values filtered out. |
 | `rating` | `rating` | Passed through. |
 | `availabilityStatus` | `attributes.availability` | Defaults to `Unknown`. |
 | `stock` | `attributes.stock` | Converted to a string; defaults to `Unknown`. |

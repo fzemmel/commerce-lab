@@ -6,7 +6,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # Commerce Lab agent guide
 
-Commerce Lab is a Next.js 16 App Router product-discovery application built with React 19, TypeScript, Tailwind CSS, Vitest, Storybook, and Lighthouse CI. It provides `/`, `/products`, and `/products/[slug]`.
+Commerce Lab is a Next.js 16 App Router product-discovery application built with React 19, TypeScript, Tailwind CSS, Vitest, Storybook, and Lighthouse CI. It provides `/`, `/products`, `/products/[slug]`, and `/compare`.
 
 `DESIGN.md` is the architectural source of truth. Read it before changing routes, data access, product discovery, or component boundaries.
 
@@ -21,7 +21,7 @@ Commerce Lab is a Next.js 16 App Router product-discovery application built with
 
 Product data comes from DummyJSON through `src/lib/products-api.ts`, which maps it into the internal `Product` type and falls back to local data. UI code must not depend on DummyJSON response types.
 
-Use Server Components by default. Add `"use client"` only for browser interaction, event handlers, state, or Next navigation hooks. Keep Client Components small: `ProductFilters` updates the URL, and the server route renders the resulting catalog. Product-listing state (`q`, `category`, `sort`, and `page`) is URL-driven; do not add global client state without an approved architectural change.
+Use Server Components by default. Add `"use client"` only for browser interaction, event handlers, state, or Next navigation hooks. Keep Client Components small: `ProductFilters` updates the URL, and the server route renders the resulting catalog. Product-listing state (`q`, `brand`, `category`, `priceMin`, `priceMax`, `sort`, and `page`) is URL-driven; do not add global client state without an approved architectural change.
 
 ## Accessibility
 

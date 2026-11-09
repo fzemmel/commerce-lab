@@ -94,6 +94,7 @@ Products can be added to a comparison from the product detail page.
 - The comparison table resolves selected IDs against the server-loaded catalog and shows brand, category, price, rating, and product attributes.
 - Products can be removed individually, or the comparison can be cleared.
 - Selection is persisted as product IDs in session storage after hydration. No product data is stored in the URL or in global state.
-- The comparison provider sanitizes restored values and ignores duplicate or unknown IDs.
+- The comparison provider sanitizes restored values with `sanitizeCompareProducts()`: it validates non-empty IDs, removes duplicates, and caps the selection at four products.
+- Unknown or stale IDs that survive sanitization are ignored by `ComparisonView` when it resolves the selection against the server-loaded catalog.
 
 See [Application Architecture](/architecture) for the component boundary and [Product Data and Caching](/product-data) for the persistence details.

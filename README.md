@@ -133,7 +133,7 @@ See [Contributing and quality](docs/contributing.md) for CI, Dependabot, and pul
 - Add infinite loading or cursor-based pagination
 - Add additional facets such as color, material, and sale status
 - Add Playwright smoke tests for listing and detail routes
-- Add component tests for product cards and filter controls
+- Add component tests for product cards and pagination controls
 - Add route-level metadata and structured data for product details
 - Move from the demo product API to a dedicated headless commerce adapter
 - Add wishlist or recently viewed interactions

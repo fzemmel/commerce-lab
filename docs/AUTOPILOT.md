@@ -1,6 +1,6 @@
 # Autonomous Milestone Delivery
 
-This is an **opt-in** GitHub Actions workflow for delivering a GitHub milestone without reviewing every individual implementation PR. It is **not** enabled on a schedule and **never merges into `main`**.
+This is an **opt-in** GitHub Actions workflow for delivering a GitHub milestone without reviewing every individual implementation PR. It is **not** enabled on a schedule and **never merges into `main` automatically**; it only opens a draft release PR for human review.
 
 ## How it works
 
@@ -50,7 +50,7 @@ Monitor Actions runs, integration PRs, and the final release PR. The workflow ha
 
 ## Safeguards
 
-- Never automatically targets `main`; deployment remains behind an explicit human merge.
+- Never automatically merges into `main`; it only opens a draft release PR for human review. Deployment remains behind an explicit human merge.
 - Only GitHub's `Quality checks` check and a valid independent OpenAI verdict for the exact current PR head SHA can authorize an integration merge.
 - Each integration branch must also pass its own CI after the prior issue's merge.
 - Protected infrastructure such as `.github/**`, `.opencode/**`, `scripts/autopilot*`, `AGENTS.md`, credentials and deployment configuration cannot be autonomously merged.

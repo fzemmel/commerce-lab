@@ -30,7 +30,7 @@ features:
     link: /getting-started
   - title: Delivery automation
     details: Understand the CI quality gate, container deployment, dependency updates, the opt-in Milestone Autopilot, and the AI review gate.
-    link: /contributing
+    link: /milestone-autopilot
 ---
 
 ## Start here
