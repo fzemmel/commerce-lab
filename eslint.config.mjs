@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "storybook-static/**",
     "lighthouse-reports/**",
     ".lighthouseci/**",
+    "docs/.vitepress/dist/**",
+    "docs/.vitepress/cache/**",
     "next-env.d.ts",
   ]),
 ]);

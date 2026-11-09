@@ -16,6 +16,10 @@
 /lighthouse-reports
 /storybook-static
 
+# vitepress
+/docs/.vitepress/dist
+/docs/.vitepress/cache
+
 # next.js
 /.next/
 /out/
